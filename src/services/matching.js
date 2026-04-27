@@ -71,35 +71,28 @@ function evaluateMatch(staff, client) {
     }
   }
 
-  // 3. 性別希望チェック
+  // 3. 性別希望チェック（絶対条件）
   if (client.genderPreference && client.genderPreference !== '指定なし') {
     const preferred = client.genderPreference.replace('希望', '');
     if (staff.gender === preferred) {
-      score += MATCHING_WEIGHTS.preferredGender;
+      score += MATCHING_WEIGHTS.genderMatch;
       reasons.push(`✅ 性別希望合致（${preferred}）`);
     } else {
-      score -= MATCHING_WEIGHTS.preferredGender;
-      reasons.push(`⚠️ 性別希望不一致（希望: ${preferred}）`);
+      eligible = false; // 絶対条件なので不一致はNG
+      reasons.push(`❌ 性別希望不一致（希望: ${preferred}）`);
     }
   }
 
-  // 4. 指名職員チェック
-  if (client.preferredStaff === staff.id) {
-    score += MATCHING_WEIGHTS.preferredStaff;
-    reasons.push('✅ 指名職員');
+  // 4. 正社員優先
+  if (staff.type === '正社員') {
+    score += MATCHING_WEIGHTS.staffType;
+    reasons.push('✅ 正社員');
   }
 
-  // 5. 除外職員チェック
-  if (client.excludedStaff?.includes(staff.id)) {
-    eligible = false;
-    score += MATCHING_WEIGHTS.excludedStaff;
-    reasons.push('❌ 除外職員');
-  }
-
-  // 6. 距離ボーナス（近いほど高得点）
+  // 5. 距離ボーナス（近いほど高得点）
   if (staff.lat && client.lat) {
     const dist = haversineDistance(staff.lat, staff.lng, client.lat, client.lng);
-    // 5km以内なら最大30点、それ以上は逓減
+    // 同じエリアなら10分、違うエリアなら20分などの概念を簡略化して距離で評価
     const proximityScore = Math.max(0, MATCHING_WEIGHTS.proximity * (1 - dist / 10));
     score += proximityScore;
   }

@@ -56,20 +56,110 @@ async function loadSchedule() {
     return;
   }
 
-  // 職員ごとにグループ化
+  // 職員ごとにグループ化し、収支計算と移動時間を算出
   const grouped = {};
+  let totalRevenue = 0;
+  let totalLaborCost = 0;
+  let totalVehicleCost = 0;
+
   for (const v of visits) {
     if (!grouped[v.staffId]) grouped[v.staffId] = [];
     grouped[v.staffId].push(v);
   }
 
+  // 管理者向けシミュレーションUI
+  let simulationHtml = '';
+  if (window.isAdmin) {
+    // 収支の計算
+    for (const [staffId, staffVisits] of Object.entries(grouped)) {
+      const staff = staffList.find(s => s.id === staffId);
+      if (!staff) continue;
+      const hourlyWage = parseInt(staff.wage) || 1500;
+
+      // 訪問を時間順にソート
+      staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
+
+      let prevClientArea = null;
+      
+      staffVisits.forEach((v, index) => {
+        // 売上
+        totalRevenue += parseInt(v.income) || 3000; // デフォルト売上
+        // 人件費（所要時間から算出）
+        const hours = (v.duration || 60) / 60;
+        totalLaborCost += hourlyWage * hours;
+
+        // 移動費の計算
+        const client = clientList.find(c => c.id === v.clientId);
+        const currentArea = client ? client.area : null;
+        
+        let travelDistance = 0;
+        let travelTime = 0;
+
+        if (index === 0) {
+          // 最初の訪問（拠点から）
+          travelDistance = 4; // 仮:拠点から4km
+        } else {
+          // 直前の訪問からの移動
+          if (prevClientArea && currentArea && prevClientArea !== currentArea) {
+            travelDistance = 8;
+            travelTime = 20;
+          } else {
+            travelDistance = 4;
+            travelTime = 10;
+          }
+        }
+        
+        v.calculatedTravelTime = travelTime;
+        totalVehicleCost += travelDistance * 25; // 25円/km
+        prevClientArea = currentArea;
+      });
+
+      // 最後の退勤移動（仮）
+      totalVehicleCost += 4 * 25; 
+    }
+
+    const profit = totalRevenue - totalLaborCost - totalVehicleCost;
+    const profitMargin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 100) : 0;
+
+    simulationHtml = `
+      <div class="card" style="margin-bottom: 20px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success);">
+        <h3 class="card-title" style="color: var(--success); margin-bottom: 15px;">
+          <span class="material-icons-round">analytics</span>
+          【管理者専用】本日の収支シミュレーション
+        </h3>
+        <div class="grid grid-4" style="gap: 15px; text-align: center;">
+          <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">想定売上</div>
+            <div style="font-size: 1.5rem; font-weight: bold;">¥${totalRevenue.toLocaleString()}</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">人件費</div>
+            <div style="font-size: 1.5rem; font-weight: bold; color: var(--warning);">¥${totalLaborCost.toLocaleString()}</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">車両・移動費</div>
+            <div style="font-size: 1.5rem; font-weight: bold; color: var(--warning);">¥${totalVehicleCost.toLocaleString()}</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">想定利益 (利益率)</div>
+            <div style="font-size: 1.5rem; font-weight: bold; color: ${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">
+              ¥${profit.toLocaleString()} <span style="font-size: 1rem;">(${profitMargin}%)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   contentDiv.innerHTML = `
+    ${simulationHtml}
     <div style="margin-bottom:12px;color:var(--text-secondary)">
       ${formatDateJP(selectedDate)} — ${visits.length}件の訪問
     </div>
     <div class="grid grid-2">
       ${Object.entries(grouped).map(([staffId, staffVisits]) => {
         const staff = staffList.find(s => s.id === staffId);
+        
         return `
           <div class="card" style="border-left:4px solid ${staff?.color || '#999'}">
             <h3 class="card-title" style="margin-bottom:12px">
@@ -80,17 +170,63 @@ async function loadSchedule() {
               ${escapeHtml(staff?.name || '未割当')}
             </h3>
             <div class="schedule-timeline">
-              ${staffVisits.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || '')).map(v => {
+              ${staffVisits.map((v, index) => {
                 const client = clientList.find(c => c.id === v.clientId);
+                const timeStr = v.startTime || v.scheduledTime || '--:--';
+                
+                // 移動時間ブロックの描画（2件目以降）
+                let travelBlock = '';
+                let warningBlock = '';
+                
+                if (index > 0) {
+                   const prev = staffVisits[index - 1];
+                   const prevTimeStr = prev.startTime || prev.scheduledTime;
+                   const travelTime = v.calculatedTravelTime || 10;
+                   
+                   if (prevTimeStr && timeStr !== '--:--') {
+                      // 重複・移動不足チェック
+                      const [pH, pM] = prevTimeStr.split(':').map(Number);
+                      const [cH, cM] = timeStr.split(':').map(Number);
+                      const prevEndMins = pH * 60 + pM + (prev.duration || 60);
+                      const currentStartMins = cH * 60 + cM;
+                      
+                      const diffMins = currentStartMins - prevEndMins;
+                      
+                      if (diffMins < travelTime) {
+                        warningBlock = `
+                          <div style="color:var(--danger); font-size: 0.8rem; padding: 4px 8px; background: rgba(239, 68, 68, 0.1); border-radius: 4px; margin-bottom: 8px;">
+                            <span class="material-icons-round" style="font-size: 14px; vertical-align: middle;">warning</span>
+                            移動時間が不足しています（必要: ${travelTime}分, 実際: ${diffMins}分）
+                          </div>
+                        `;
+                      }
+                      
+                      travelBlock = `
+                        <div style="margin-left: 60px; padding: 4px 0; color: var(--text-muted); font-size: 0.85rem; display: flex; align-items: center; border-left: 2px dashed var(--border); padding-left: 14px;">
+                          <span class="material-icons-round" style="font-size: 14px; margin-right: 4px;">directions_car</span>
+                          移動時間: 約${travelTime}分
+                        </div>
+                      `;
+                   }
+                }
+
                 return `
+                  ${travelBlock}
+                  ${warningBlock}
                   <div class="time-slot">
-                    <div class="time-label">${v.scheduledTime || '--:--'}</div>
+                    <div class="time-label">${timeStr}</div>
                     <div class="time-content">
                       <div class="visit-card">
                         <div style="display:flex;justify-content:space-between;align-items:start">
                           <div>
                             <strong>${escapeHtml(client?.name || '不明')}</strong>
-                            <div style="font-size:.8rem;color:var(--text-muted)">${v.service || ''} | ${v.duration || 60}分</div>
+                            <div style="font-size:.8rem;color:var(--text-muted)">
+                              ${v.serviceInfo || v.service || '訪問'} | ${v.duration || 60}分
+                            </div>
+                            <div style="font-size:.75rem;color:var(--text-muted); margin-top:2px;">
+                              <span class="material-icons-round" style="font-size:12px;vertical-align:middle">place</span>
+                              ${escapeHtml(client?.area || '未設定')}
+                            </div>
                           </div>
                           <button class="btn-icon" data-delete-visit="${v.id}" style="color:var(--danger)" title="削除">
                             <span class="material-icons-round" style="font-size:18px">close</span>

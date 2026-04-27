@@ -3,8 +3,8 @@ import './styles/index.css';
 import { onAuthChange, logout } from './services/auth.js';
 import { initLogin } from './pages/login.js';
 import { initRouter, navigateTo } from './app.js';
-import { addStaff, addClient, getStaffList, getClientList } from './services/firestore.js';
-import { DEMO_STAFF, DEMO_CLIENTS } from './data/demo-data.js';
+import { addStaff, addClient, getStaffList, getClientList, addVisit } from './services/firestore.js';
+import { DEMO_STAFF, DEMO_CLIENTS, DEMO_VISIT_SCHEDULES } from './data/demo-data.js';
 import { showToast } from './utils/helpers.js';
 
 // アプリ初期化
@@ -92,6 +92,9 @@ function showMainApp(user) {
   if (avatar) avatar.src = user.photoURL || '';
   if (nameEl) nameEl.textContent = user.displayName || user.email;
 
+  // 今回のプロトタイプではデモユーザーを管理者とする
+  window.isAdmin = (user.email === 'demo@careroute.local');
+
   // デモデータ投入ボタン（初回のみ）
   addDemoDataButton();
 }
@@ -132,12 +135,12 @@ async function loadDemoData(skipConfirm = false) {
   }
 
   try {
-    // 既存データ確認
+    // 既存データ確認とクリア
     const existingStaff = await getStaffList();
     const existingClients = await getClientList();
 
     if (existingStaff.length > 0 || existingClients.length > 0) {
-      if (!skipConfirm && !confirm(`既に職員${existingStaff.length}名、利用者${existingClients.length}名が登録されています。追加でデモデータを投入しますか？`)) {
+      if (!skipConfirm && !confirm(`既存のデータを全て削除し、新しいエクセルデータを投入しますか？`)) {
         if (btn) {
           btn.innerHTML = `
             <span class="material-icons-round" style="color:var(--secondary)">science</span>
@@ -146,6 +149,11 @@ async function loadDemoData(skipConfirm = false) {
         }
         return;
       }
+      
+      // 既存データをクリア
+      localStorage.removeItem('careroute_staff');
+      localStorage.removeItem('careroute_clients');
+      localStorage.removeItem('careroute_visits');
     }
 
     // 職員データ投入
@@ -159,6 +167,17 @@ async function loadDemoData(skipConfirm = false) {
       await addClient(client);
     }
     showToast(`利用者 ${DEMO_CLIENTS.length}名 を登録しました`, 'success');
+
+    // 訪問スケジュールデータ投入
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const visit of DEMO_VISIT_SCHEDULES) {
+      await addVisit({
+        ...visit,
+        date: todayStr,
+        status: 'scheduled'
+      });
+    }
+    showToast(`予定 ${DEMO_VISIT_SCHEDULES.length}件 を登録しました`, 'success');
 
     // ダッシュボードを再表示
     await navigateTo('dashboard');

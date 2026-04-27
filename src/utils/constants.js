@@ -57,19 +57,33 @@ export const STAFF_COLORS = [
   '#E91E63', '#00BCD4', '#8BC34A', '#FF5722',
 ];
 
-// マッチングの重み設定
+// マッチングの重み設定と絶対条件
 export const MATCHING_WEIGHTS = {
-  requiredSkill: 100,   // 必須スキル（満たさないと割り当て不可）
-  preferredGender: 20,  // 性別希望
-  preferredStaff: 50,   // 指名職員
-  excludedStaff: -1000, // 除外職員
-  proximity: 30,        // 距離の近さ
+  requiredSkill: 1000,   // 必須スキル（満たさないと割り当て不可）
+  genderMatch: 2000,     // 性別希望（女性希望への男性配置は厳禁=マイナスで除外）
+  staffType: 500,        // 正社員優先
+  proximity: 30,         // 距離（エリア）の近さ
 };
 
-// デフォルトの事業所情報（デモ用 - 東京都新宿区役所付近）
+// エリアと移動時間（分）
+export const TRAVEL_TIMES = {
+  SAME_AREA: 10,
+  CROSS_AREA: 20,
+};
+
+// 拠点からエリアへの移動距離（km）
+export const DISTANCE_TO_AREA = {
+  SAME_AREA: 4,
+  CROSS_AREA: 8,
+};
+
+// 経費（1kmあたり）
+export const COST_PER_KM = 25;
+
+// デフォルトの事業所情報
 export const DEFAULT_OFFICE = {
-  name: 'ケアルート訪問介護ステーション',
-  address: '東京都新宿区歌舞伎町1-4-1',
-  lat: 35.6938,
-  lng: 139.7034,
+  name: '事業所（拠点）',
+  address: '〒501-3304 岐阜県加茂郡富加町高畑２９１',
+  lat: 35.497,  // 富加町付近の座標
+  lng: 136.993,
 };
