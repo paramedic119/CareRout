@@ -138,6 +138,7 @@ export async function updateClient(id, data) { return updateDocument('clients', 
 export async function deleteClient(id) { return deleteDocument('clients', id); }
 
 // --- 訪問 ---
+export async function getVisitList() { return getCollection('visits'); }
 export async function getVisitsByDate(date) { return queryDocuments('visits', 'date', '==', date); }
 export async function addVisit(data) { return addDocument('visits', data); }
 export async function updateVisit(id, data) { return updateDocument('visits', id, data); }

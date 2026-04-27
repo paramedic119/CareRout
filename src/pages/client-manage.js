@@ -1,13 +1,24 @@
 // 利用者管理画面
-import { getClientList, addClient, updateClient, deleteClient } from '../services/firestore.js';
+import { getClientList, addClient, updateClient, deleteClient, getVisitList } from '../services/firestore.js';
 import { CARE_LEVELS, SERVICE_TYPES, GENDER_PREFERENCES, SKILL_CATEGORIES } from '../utils/constants.js';
 import { showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
 
 let currentClientList = [];
+let allVisits = [];
 
 export async function renderClientManage() {
   const container = document.getElementById('page-container');
-  currentClientList = await getClientList().catch(() => []);
+  
+  try {
+    const [clients, visits] = await Promise.all([
+      getClientList().catch(() => []),
+      getVisitList().catch(() => [])
+    ]);
+    currentClientList = clients;
+    allVisits = visits;
+  } catch(e) {
+    console.error("データの取得に失敗", e);
+  }
 
   container.innerHTML = `
     <div class="page-header">
@@ -21,14 +32,14 @@ export async function renderClientManage() {
       </button>
     </div>
     <div id="client-list-container">
-      ${renderClientList(currentClientList)}
+      ${renderClientList(currentClientList, allVisits)}
     </div>
   `;
 
   document.getElementById('btn-add-client').addEventListener('click', () => openClientForm());
 }
 
-function renderClientList(list) {
+function renderClientList(list, visits) {
   if (list.length === 0) {
     return `<div class="empty-state">
       <span class="material-icons-round">person_off</span>
@@ -42,23 +53,39 @@ function renderClientList(list) {
       <table class="data-table">
         <thead><tr>
           <th>氏名</th><th>介護度</th><th>必要サービス</th><th>必要スキル</th>
-          <th>希望時間帯</th><th>所要時間</th><th>操作</th>
+          <th>利用予定（曜日・時間）</th><th>操作</th>
         </tr></thead>
         <tbody>
-          ${list.map(c => `<tr>
-            <td><strong>${escapeHtml(c.name)}</strong><br><span style="font-size:.75rem;color:var(--text-muted)">${c.genderPreference !== '指定なし' ? c.genderPreference : ''}</span></td>
-            <td><span class="tag ${c.careLevel?.includes('4') || c.careLevel?.includes('5') ? 'tag-danger' : ''}">${c.careLevel || '-'}</span></td>
-            <td><div class="tags-container">${(c.requiredServices || []).map(s => `<span class="tag tag-secondary">${s}</span>`).join('')}</div></td>
-            <td><div class="tags-container">${(c.requiredSkills || []).map(s => `<span class="tag tag-accent">${s}</span>`).join('') || '-'}</div></td>
-            <td>${c.timeWindow ? `${c.timeWindow.start}〜${c.timeWindow.end}` : '-'}</td>
-            <td>${c.visitDuration || 60}分</td>
-            <td>
-              <div class="btn-group">
-                <button class="btn-icon" data-edit-client="${c.id}"><span class="material-icons-round">edit</span></button>
-                <button class="btn-icon" data-delete-client="${c.id}" style="color:var(--danger)"><span class="material-icons-round">delete</span></button>
-              </div>
-            </td>
-          </tr>`).join('')}
+          ${list.map(c => {
+            // この利用者の訪問予定を抽出（曜日順に並び替え）
+            const dayOrder = { '月':1, '火':2, '水':3, '木':4, '金':5, '土':6, '日':7 };
+            const clientVisits = visits.filter(v => v.clientId === c.id).sort((a, b) => {
+              const d1 = dayOrder[a.dayOfWeek] || 99;
+              const d2 = dayOrder[b.dayOfWeek] || 99;
+              return d1 - d2;
+            });
+            
+            const visitHtml = clientVisits.length > 0
+              ? clientVisits.map(v => `<div style="font-size:0.85rem;margin-bottom:2px;">
+                  <span class="tag" style="background:#E2E8F0;color:#333">${v.dayOfWeek || '不明'}</span>
+                  ${v.startTime}〜${v.endTime} (${v.duration}分)
+                </div>`).join('')
+              : '<span style="color:var(--text-muted)">設定なし</span>';
+
+            return `<tr>
+              <td><strong>${escapeHtml(c.name)}</strong><br><span style="font-size:.75rem;color:var(--text-muted)">${c.genderPreference !== '指定なし' ? c.genderPreference : ''}</span></td>
+              <td><span class="tag ${c.careLevel?.includes('4') || c.careLevel?.includes('5') ? 'tag-danger' : ''}">${c.careLevel || '-'}</span></td>
+              <td><div class="tags-container">${(c.requiredServices || []).map(s => `<span class="tag tag-secondary">${s}</span>`).join('')}</div></td>
+              <td><div class="tags-container">${(c.requiredSkills || []).map(s => `<span class="tag tag-accent">${s}</span>`).join('') || '-'}</div></td>
+              <td>${visitHtml}</td>
+              <td>
+                <div class="btn-group">
+                  <button class="btn-icon" data-edit-client="${c.id}"><span class="material-icons-round">edit</span></button>
+                  <button class="btn-icon" data-delete-client="${c.id}" style="color:var(--danger)"><span class="material-icons-round">delete</span></button>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
