@@ -173,11 +173,27 @@ async function loadDemoData(skipConfirm = false) {
     showToast(`利用者 ${DEMO_CLIENTS.length}名 を登録しました`, 'success');
 
     // 訪問スケジュールデータ投入
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayObj = new Date();
+    const currentDayOfWeek = todayObj.getDay(); // 0:日, 1:月...
+    const dayMap = { '日': 0, '月': 1, '火': 2, '水': 3, '木': 4, '金': 5, '土': 6 };
+
     for (const visit of DEMO_VISIT_SCHEDULES) {
+      let visitDateObj = new Date(todayObj);
+      if (visit.dayOfWeek && dayMap[visit.dayOfWeek] !== undefined) {
+        // 今週の該当曜日の日付を計算
+        const diff = dayMap[visit.dayOfWeek] - currentDayOfWeek;
+        visitDateObj.setDate(todayObj.getDate() + diff);
+      }
+      
+      // YYYY-MM-DD形式の文字列作成（ローカルタイムゾーン考慮）
+      const y = visitDateObj.getFullYear();
+      const m = String(visitDateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(visitDateObj.getDate()).padStart(2, '0');
+      const visitDateStr = `${y}-${m}-${d}`;
+
       await addVisit({
         ...visit,
-        date: todayStr,
+        date: visitDateStr,
         status: 'scheduled'
       });
     }
