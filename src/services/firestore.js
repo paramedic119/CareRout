@@ -17,6 +17,17 @@ function saveLocalCollection(name) {
   localStorage.setItem(`careroute_${name}`, JSON.stringify(localStore[name] || []));
 }
 
+export function clearLocalData() {
+  localStorage.removeItem('careroute_staff');
+  localStorage.removeItem('careroute_clients');
+  localStorage.removeItem('careroute_visits');
+  localStorage.removeItem('careroute_routes');
+  localStore.staff = [];
+  localStore.clients = [];
+  localStore.visits = [];
+  localStore.routes = [];
+}
+
 // --- Firestore動的インポート ---
 let firestoreMod = null;
 if (isFirebaseConfigured) {

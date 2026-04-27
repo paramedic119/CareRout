@@ -3,7 +3,7 @@ import './styles/index.css';
 import { onAuthChange, logout } from './services/auth.js';
 import { initLogin } from './pages/login.js';
 import { initRouter, navigateTo } from './app.js';
-import { addStaff, addClient, getStaffList, getClientList, addVisit } from './services/firestore.js';
+import { addStaff, addClient, getStaffList, getClientList, addVisit, clearLocalData } from './services/firestore.js';
 import { DEMO_STAFF, DEMO_CLIENTS, DEMO_VISIT_SCHEDULES } from './data/demo-data.js';
 import { showToast } from './utils/helpers.js';
 
@@ -151,9 +151,13 @@ async function loadDemoData(skipConfirm = false) {
       }
       
       // 既存データをクリア
-      localStorage.removeItem('careroute_staff');
-      localStorage.removeItem('careroute_clients');
-      localStorage.removeItem('careroute_visits');
+      if (typeof clearLocalData === 'function') {
+        clearLocalData();
+      } else {
+        localStorage.removeItem('careroute_staff');
+        localStorage.removeItem('careroute_clients');
+        localStorage.removeItem('careroute_visits');
+      }
     }
 
     // 職員データ投入
