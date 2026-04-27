@@ -17,7 +17,26 @@ function saveLocalCollection(name) {
   localStorage.setItem(`careroute_${name}`, JSON.stringify(localStore[name] || []));
 }
 
-export function clearLocalData() {
+export async function clearAllData() {
+  if (isFirebaseConfigured) {
+    const mod = await getFirestoreMod();
+    const collections = ['staff', 'clients', 'visits', 'routes'];
+    
+    for (const colName of collections) {
+      const ref = mod.collection(db, colName);
+      const snap = await mod.getDocs(ref);
+      
+      if (!snap.empty) {
+        const batch = mod.writeBatch(db);
+        snap.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+      }
+    }
+  }
+
+  // ローカルも念のためクリア
   localStorage.removeItem('careroute_staff');
   localStorage.removeItem('careroute_clients');
   localStorage.removeItem('careroute_visits');
