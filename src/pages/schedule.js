@@ -68,42 +68,40 @@ async function loadSchedule() {
     grouped[v.staffId].push(v);
   }
 
+  // 移動時間と収支の計算
+  for (const [staffId, staffVisits] of Object.entries(grouped)) {
+    const staff = staffList.find(s => s.id === staffId);
+    if (!staff) continue;
+    const staffRoute = routes.find(r => r.staffId === staffId);
+
+    // 収支用の移動コスト加算
+    if (staffRoute) {
+      totalVehicleCost += (staffRoute.totalDistance || 0) * 25;
+    }
+
+    // 訪問を時間順にソート
+    staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
+
+    staffVisits.forEach((v, index) => {
+      // 収支計算
+      totalRevenue += parseInt(v.income) || 3000;
+      totalLaborCost += (staff.wage || 1500) * ((v.duration || 60) / 60);
+
+      // 移動時間の特定（Google Mapsの実ルートデータ優先）
+      let travelTime = 10;
+      if (staffRoute && staffRoute.schedule) {
+        const currentPoint = staffRoute.schedule.find(p => p.clientId === v.clientId);
+        if (currentPoint) {
+          travelTime = currentPoint.travelTimeFromPrev || 10;
+        }
+      }
+      v.calculatedTravelTime = travelTime;
+    });
+  }
+
   // 管理者向けシミュレーションUI
   let simulationHtml = '';
   if (window.isAdmin) {
-    // 収支の計算
-    for (const [staffId, staffVisits] of Object.entries(grouped)) {
-      const staff = staffList.find(s => s.id === staffId);
-      if (!staff) continue;
-      const hourlyWage = parseInt(staff.wage) || 1500;
-      const staffRoute = routes.find(r => r.staffId === staffId);
-
-      // 移動コストの加算
-      if (staffRoute) {
-        totalVehicleCost += (staffRoute.totalDistance || 0) * 25;
-      }
-
-      // 訪問を時間順にソート
-      staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
-
-      staffVisits.forEach((v, index) => {
-        // 売上
-        totalRevenue += parseInt(v.income) || 3000;
-        // 人件費
-        totalLaborCost += hourlyWage * ((v.duration || 60) / 60);
-
-        // 移動時間の特定
-        let travelTime = 10;
-        if (staffRoute && staffRoute.schedule) {
-          const currentPoint = staffRoute.schedule.find(p => p.clientId === v.clientId);
-          if (currentPoint) {
-            travelTime = currentPoint.travelTimeFromPrev || 10;
-          }
-        }
-        v.calculatedTravelTime = travelTime;
-      });
-    }
-
     const profit = totalRevenue - totalLaborCost - totalVehicleCost;
     const profitMargin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 100) : 0;
 

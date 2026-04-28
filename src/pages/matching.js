@@ -12,6 +12,10 @@ let selectedDate = today();
 
 export async function renderMatching() {
   const container = document.getElementById('page-container');
+  const staffList = await getStaffList();
+  
+  // 選択された日付の曜日を取得
+  const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][new Date(selectedDate).getDay()];
 
   container.innerHTML = `
     <div class="page-header">
@@ -25,11 +29,36 @@ export async function renderMatching() {
       </div>
     </div>
 
+    <!-- 職員の出勤選択 -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <h3 class="card-title">
+          <span class="material-icons-round">people</span>
+          出勤職員の確認 (${dayOfWeek}曜日)
+        </h3>
+      </div>
+      <div class="grid grid-4" style="gap:12px">
+        ${staffList.filter(s => s.isActive).map(staff => {
+          // デフォルトでその曜日がシフトに入っているか
+          const isShiftDay = staff.days?.includes(dayOfWeek);
+          return `
+            <label class="card" style="display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer;${isShiftDay ? 'border-color:var(--primary)' : ''}">
+              <input type="checkbox" class="staff-attendance-checkbox" data-staff-id="${staff.id}" ${isShiftDay ? 'checked' : ''} style="width:18px;height:18px">
+              <div>
+                <div style="font-weight:600">${escapeHtml(staff.name)}</div>
+                <div style="font-size:.7rem;color:var(--text-muted)">${staff.type} | ${isShiftDay ? '通常出勤' : '通常休み'}</div>
+              </div>
+            </label>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
     <!-- 実行ボタン -->
     <div class="card" style="margin-bottom:24px;text-align:center;padding:32px">
       <h3 style="margin-bottom:8px">自動マッチング＆ルート最適化</h3>
       <p style="color:var(--text-secondary);margin-bottom:20px">
-        職員のスキルと利用者のニーズを照合し、選択された日付の最適な割り当てを算出します
+        上記でチェックした職員を使用して、最適な割り当てを算出します
       </p>
       <button class="btn btn-primary" id="btn-run-optimization" style="padding:14px 40px;font-size:1rem">
         <span class="material-icons-round">play_arrow</span>
@@ -43,6 +72,7 @@ export async function renderMatching() {
 
   document.getElementById('match-date-picker').addEventListener('change', (e) => {
     selectedDate = e.target.value;
+    renderMatching(); // 日付変更時に再描画して曜日を反映
   });
 
   document.getElementById('btn-run-optimization').addEventListener('click', runOptimization);
@@ -64,12 +94,23 @@ async function runOptimization() {
       getVisitsByDate(selectedDate),
     ]);
 
-    if (staffList.length === 0) {
-      showToast('職員が登録されていません', 'warning');
+    // チェックされている職員IDを取得
+    const checkedStaffIds = Array.from(document.querySelectorAll('.staff-attendance-checkbox:checked'))
+      .map(cb => cb.dataset.staffId);
+    
+    const activeStaff = staffList.filter(s => checkedStaffIds.includes(s.id));
+
+    if (activeStaff.length === 0) {
+      showToast('出勤する職員を少なくとも1名選択してください', 'warning');
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons-round">play_arrow</span> 最適化を実行';
       return;
     }
+
     if (visits.length === 0) {
-      showToast(`${formatDateJP(new Date(selectedDate))} の訪問予定がありません。スケジュール画面で予定を作成してください。`, 'warning');
+      showToast(`${formatDateJP(new Date(selectedDate))} の訪問予定がありません。`, 'warning');
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons-round">play_arrow</span> 最適化を実行';
       return;
     }
 
@@ -87,19 +128,19 @@ async function runOptimization() {
       console.warn('全体距離行列の取得に失敗:', e);
     }
 
-    // Step 1: マッチング（実走行マトリックスを渡す）
+    // Step 1: マッチング（選択された職員のみを渡す）
     const { assignments, unassigned } = autoAssign(
-      staffList.filter(s => s.isActive),
+      activeStaff,
       visits,
       globalDistanceMatrix,
       allPoints
     );
     lastAssignments = assignments;
 
-    // Step 2: ルート最適化（実走行データ取得関数を渡す）
+    // Step 2: ルート最適化
     const routes = await optimizeRoutes(
       assignments, 
-      staffList, 
+      activeStaff, 
       clientList, 
       DEFAULT_OFFICE,
       async (points) => {

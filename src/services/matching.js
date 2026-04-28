@@ -214,6 +214,8 @@ export function autoAssign(staffList, visitList, globalMatrix = null, points = [
         score: bestMatch.score,
         startTime: visit.startTime,
         endTime: visit.endTime,
+        scheduledTime: visit.scheduledTime,
+        duration: visit.duration || 60,
       });
 
       assignedVisits.add(visit.id);
