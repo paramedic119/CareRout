@@ -118,8 +118,14 @@ async function loadSchedule() {
     // 訪問を時間順にソート
     staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
 
-    // 人件費の計算（最初の訪問開始〜最後の訪問終了まで）
-    if (staffVisits.length > 0) {
+    // 人件費の計算（拘束時間ベース：事業所出発〜事業所帰還まで）
+    if (staffRoute && staffRoute.schedule && staffRoute.schedule.length >= 2) {
+      const start = staffRoute.schedule[0].arrivalMinutes;
+      const end = staffRoute.schedule[staffRoute.schedule.length - 1].arrivalMinutes;
+      const workHours = (end - start) / 60;
+      totalLaborCost += workHours * hourlyWage;
+    } else if (staffVisits.length > 0) {
+      // ルートがない場合のフォールバック
       const first = staffVisits[0];
       const last = staffVisits[staffVisits.length - 1];
       const startTime = first.startTime || first.scheduledTime || '09:00';
