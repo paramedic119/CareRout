@@ -1,6 +1,6 @@
 // マップビュー画面
 import { getStaffList, getClientList, getRoutesByDate, getVisitsByDate } from '../services/firestore.js';
-import { loadGoogleMapsAPI, initMap, addColoredMarker, addOfficeMarker, drawRoutePolyline, clearMap, fitBounds } from '../services/google-maps.js';
+import { loadGoogleMapsAPI, initMap, addColoredMarker, addOfficeMarker, drawDirectionsRoute, clearMap, fitBounds } from '../services/google-maps.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
 import { today, formatDateJP } from '../utils/helpers.js';
 
@@ -133,7 +133,7 @@ async function loadAndDisplayRoutes(map) {
       }
 
       points.push({ lat: DEFAULT_OFFICE.lat, lng: DEFAULT_OFFICE.lng });
-      drawRoutePolyline(points, color, staff?.name);
+      await drawDirectionsRoute(points, color);
     }
   } else {
     // ルートがない場合、その日に訪問予定がある利用者のみをプレーンマーカーで表示
