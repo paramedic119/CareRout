@@ -28,7 +28,18 @@ export async function optimizeRoutes(assignments, staffList, clientList, office 
     // 訪問地点リスト（事業所→利用者→事業所）
     const points = [
       { id: 'office', name: '事業所', lat: office.lat, lng: office.lng, isOffice: true },
-      ...clients.map(c => ({ id: c.id, name: c.name, lat: c.lat, lng: c.lng, duration: c.visitDuration, timeWindow: c.timeWindow })),
+      ...clients.map(c => {
+        const assignment = assignments.find(a => a.clientId === c.id && a.staffId === staffId);
+        return { 
+          id: c.id, 
+          name: c.name, 
+          lat: c.lat, 
+          lng: c.lng, 
+          duration: c.visitDuration || 60, 
+          scheduledStart: assignment ? assignment.startTime : null,
+          timeWindow: c.timeWindow // 利用者設定の時間枠
+        };
+      }),
     ];
 
     // 距離行列を計算（実走行データがあれば優先、なければハバーサイン）
@@ -221,6 +232,24 @@ function buildSchedule(route, distMatrix, staff, realMatrix = null, points = [])
     }
 
     const point = points[route[i]];
+    // 予約時間または希望時間枠を考慮して到着時刻を調整
+    if (point) {
+      let minStartMins = 0;
+      
+      if (point.timeWindow && point.timeWindow.start) {
+        // 利用者設定の時間枠があればそれを尊重
+        minStartMins = timeToMin(point.timeWindow.start);
+      } else if (point.scheduledStart) {
+        // 時間枠がない場合は予約時間を基準にする
+        minStartMins = timeToMin(point.scheduledStart);
+      }
+
+      if (currentTime < minStartMins) {
+        // 基準より早く着いた場合は待機
+        currentTime = minStartMins;
+      }
+    }
+
     schedule.push({
       pointIndex: route[i],
       clientId: point ? point.id : null,

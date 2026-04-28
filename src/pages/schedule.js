@@ -124,13 +124,16 @@ async function loadSchedule() {
 
       // 移動時間の特定（Google Mapsの実ルートデータ優先）
       let travelTime = 10;
+      let arrivalTime = null;
       if (staffRoute && staffRoute.schedule) {
         const currentPoint = staffRoute.schedule.find(p => p.clientId === v.clientId);
         if (currentPoint) {
           travelTime = currentPoint.travelTimeFromPrev || 10;
+          arrivalTime = currentPoint.arrivalTime;
         }
       }
       v.calculatedTravelTime = travelTime;
+      v.optimizedArrivalTime = arrivalTime;
     });
   }
 
@@ -192,7 +195,8 @@ async function loadSchedule() {
             <div class="schedule-timeline">
               ${staffVisits.map((v, index) => {
                 const client = clientList.find(c => c.id === v.clientId);
-                const timeStr = v.startTime || v.scheduledTime || '--:--';
+                // 最適化された到着時刻があればそれを使用、なければ元の時間
+                const timeStr = v.optimizedArrivalTime || v.startTime || v.scheduledTime || '--:--';
                 
                 let travelBlock = '';
                 let warningBlock = '';
