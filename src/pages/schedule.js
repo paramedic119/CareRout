@@ -1,6 +1,6 @@
 // スケジュール管理画面
 import { getStaffList, getClientList, getVisitsByDate, addVisit, deleteVisit, getRoutesByDate } from '../services/firestore.js';
-import { SERVICE_TYPES } from '../utils/constants.js';
+import { SERVICE_TYPES, COST_PER_KM } from '../utils/constants.js';
 import { today, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
 
 let selectedDate = today();
@@ -108,19 +108,35 @@ async function loadSchedule() {
     const staff = staffList.find(s => s.id === staffId);
     if (!staff) continue;
     const staffRoute = routes.find(r => r.staffId === staffId);
+    const hourlyWage = parseInt(staff.wage) || 2000;
 
-    // 収支用の移動コスト加算
+    // 車両コスト（収支シミュレーションと統一）
     if (staffRoute) {
-      totalVehicleCost += (staffRoute.totalDistance || 0) * 25;
+      totalVehicleCost += (staffRoute.totalDistance || 0) * COST_PER_KM;
     }
 
     // 訪問を時間順にソート
     staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
 
+    // 人件費の計算（最初の訪問開始〜最後の訪問終了まで）
+    if (staffVisits.length > 0) {
+      const first = staffVisits[0];
+      const last = staffVisits[staffVisits.length - 1];
+      const startTime = first.startTime || first.scheduledTime || '09:00';
+      const endTime = last.startTime || last.scheduledTime || '17:00';
+      
+      const [sh, sm] = startTime.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
+      const startMins = sh * 60 + sm;
+      const endMins = eh * 60 + em + (last.duration || 60);
+      
+      const workHours = (endMins - startMins) / 60;
+      totalLaborCost += workHours * hourlyWage;
+    }
+
     staffVisits.forEach((v, index) => {
-      // 収支計算
+      // 売上のみ加算
       totalRevenue += parseInt(v.income) || 3000;
-      totalLaborCost += (staff.wage || 1500) * ((v.duration || 60) / 60);
 
       // 移動時間の特定（Google Mapsの実ルートデータ優先）
       let travelTime = 10;
