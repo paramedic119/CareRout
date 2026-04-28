@@ -1,10 +1,11 @@
 // マップビュー画面
-import { getStaffList, getClientList, getRoutesByDate } from '../services/firestore.js';
+import { getStaffList, getClientList, getRoutesByDate, getVisitsByDate } from '../services/firestore.js';
 import { loadGoogleMapsAPI, initMap, addColoredMarker, addOfficeMarker, drawRoutePolyline, clearMap, fitBounds } from '../services/google-maps.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
 import { today, formatDateJP } from '../utils/helpers.js';
 
 let staffFilter = 'all';
+let mapDate = today();
 
 export async function renderMapView() {
   const container = document.getElementById('page-container');
@@ -16,7 +17,8 @@ export async function renderMapView() {
         マップビュー
       </h1>
       <div class="btn-group">
-        <select id="staff-filter" class="form-select" style="width:200px">
+        <input type="date" id="map-date-picker" class="form-input" value="${mapDate}" style="width:160px">
+        <select id="staff-filter" class="form-select" style="width:160px">
           <option value="all">全職員表示</option>
         </select>
         <button class="btn btn-secondary" id="btn-refresh-map">
@@ -54,6 +56,12 @@ export async function renderMapView() {
   // データ読み込みと表示
   await loadAndDisplayRoutes(map);
 
+  // 日付変更イベント
+  document.getElementById('map-date-picker')?.addEventListener('change', (e) => {
+    mapDate = e.target.value;
+    loadAndDisplayRoutes(map);
+  });
+
   // フィルター変更イベント
   document.getElementById('staff-filter')?.addEventListener('change', (e) => {
     staffFilter = e.target.value;
@@ -66,9 +74,10 @@ export async function renderMapView() {
 }
 
 async function loadAndDisplayRoutes(map) {
-  const [staffList, clientList] = await Promise.all([
+  const [staffList, clientList, visits] = await Promise.all([
     getStaffList().catch(() => []),
     getClientList().catch(() => []),
+    getVisitsByDate(mapDate).catch(() => []),
   ]);
 
   // フィルターの選択肢を更新
@@ -94,7 +103,7 @@ async function loadAndDisplayRoutes(map) {
   addOfficeMarker({ lat: DEFAULT_OFFICE.lat, lng: DEFAULT_OFFICE.lng }, DEFAULT_OFFICE.name);
 
   // ルートデータを取得
-  const routes = await getRoutesByDate(today()).catch(() => []);
+  const routes = await getRoutesByDate(mapDate).catch(() => []);
 
   if (routes.length > 0) {
     // 最適化済みルートを表示
@@ -127,14 +136,20 @@ async function loadAndDisplayRoutes(map) {
       drawRoutePolyline(points, color, staff?.name);
     }
   } else {
-    // ルートがない場合、利用者をプレーンマーカーで表示
-    for (const client of clientList.filter(c => c.isActive)) {
+    // ルートがない場合、その日に訪問予定がある利用者のみをプレーンマーカーで表示
+    const clientsToVisitToday = clientList.filter(c => c.isActive && visits.some(v => v.clientId === c.id));
+    
+    for (const client of clientsToVisitToday) {
+      const visitDetails = visits.filter(v => v.clientId === client.id)
+                                 .map(v => `${v.startTime}〜${v.endTime}`)
+                                 .join(', ');
       addColoredMarker(
         { lat: client.lat, lng: client.lng },
         '#94A3B8',
         '',
         `<div style="color:#333;padding:4px">
           <strong>${client.name}</strong><br>
+          予定: ${visitDetails}<br>
           ${client.careLevel} | ${(client.requiredServices || []).join(', ')}
         </div>`,
       );
@@ -142,17 +157,18 @@ async function loadAndDisplayRoutes(map) {
   }
 
   fitBounds();
-  updateLegend(staffList, routes);
+  updateLegend(staffList, routes, visits);
 }
 
-function updateLegend(staffList, routes) {
+function updateLegend(staffList, routes, visits = []) {
   const legend = document.getElementById('route-legend');
   if (!legend) return;
 
   if (routes.length === 0) {
     legend.innerHTML = `
       <p style="color:var(--text-muted);font-size:.85rem">
-        マッチング＆最適化を実行するとルートが表示されます
+        本日の訪問予定: ${visits.length}件<br>
+        「スケジュール」画面からマッチング＆最適化を実行すると最適ルートが表示されます
       </p>
       <div style="margin-top:8px">
         <div class="legend-item">
@@ -161,7 +177,7 @@ function updateLegend(staffList, routes) {
         </div>
         <div class="legend-item">
           <div class="legend-color" style="background:#94A3B8"></div>
-          <span>利用者（未割り当て）</span>
+          <span>本日の訪問先（未ルート化）</span>
         </div>
       </div>
     `;
