@@ -2,6 +2,7 @@
 import { getStaffList, getClientList, saveRoutes, getVisitsByDate } from '../services/firestore.js';
 import { autoAssign, getScoreLevel } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
+import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
 import { showToast, today, formatDateJP, escapeHtml } from '../utils/helpers.js';
 
@@ -72,28 +73,33 @@ async function runOptimization() {
       return;
     }
 
-    // 本日訪問予定がある利用者のみを抽出
-    const visitingClientIds = [...new Set(visits.map(v => v.clientId))];
-    const targetClients = clientList.filter(c => c.isActive && visitingClientIds.includes(c.id));
-
-    if (targetClients.length === 0) {
-      showToast('対象となるアクティブな利用者がいません', 'warning');
-      return;
-    }
-
     // Step 1: マッチング
     const { assignments, unassigned } = autoAssign(
       staffList.filter(s => s.isActive),
-      targetClients,
+      visits,
     );
     lastAssignments = assignments;
 
-    // Step 2: ルート最適化
-    const routes = optimizeRoutes(assignments, staffList, targetClients, DEFAULT_OFFICE);
+    // Step 2: ルート最適化（実走行データ取得関数を渡す）
+    const routes = await optimizeRoutes(
+      assignments, 
+      staffList, 
+      clientList, 
+      DEFAULT_OFFICE,
+      async (points) => {
+        try {
+          await loadGoogleMapsAPI();
+          return await getDistanceMatrix(points);
+        } catch (e) {
+          console.warn('実走行データの取得に失敗:', e);
+          return null;
+        }
+      }
+    );
     lastRoutes = routes;
 
     // 結果表示
-    resultsDiv.innerHTML = renderResults(staffList, targetClients, assignments, unassigned, routes);
+    resultsDiv.innerHTML = renderResults(staffList, clientList, assignments, unassigned, routes);
 
     // 保存ボタンのイベント
     document.getElementById('btn-save-routes')?.addEventListener('click', async () => {

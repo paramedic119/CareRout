@@ -207,6 +207,42 @@ export async function drawDirectionsRoute(points, color) {
 }
 
 /**
+ * 複数の地点間の距離と移動時間を取得 (Distance Matrix Service)
+ */
+export async function getDistanceMatrix(points) {
+  if (!window.google || !window.google.maps) return null;
+  
+  const service = new google.maps.DistanceMatrixService();
+  const locations = points.map(p => new google.maps.LatLng(p.lat, p.lng));
+
+  try {
+    const response = await new Promise((resolve, reject) => {
+      service.getDistanceMatrix({
+        origins: locations,
+        destinations: locations,
+        travelMode: google.maps.TravelMode.DRIVING,
+        unitSystem: google.maps.UnitSystem.METRIC,
+      }, (result, status) => {
+        if (status === 'OK') resolve(result);
+        else reject(new Error(`Distance Matrix API: ${status}`));
+      });
+    });
+
+    // 距離(km)と時間(分)の行列を抽出
+    const matrix = response.rows.map(row => 
+      row.elements.map(el => ({
+        distance: el.status === 'OK' ? el.distance.value / 1000 : null,
+        duration: el.status === 'OK' ? Math.ceil(el.duration.value / 60) : null
+      }))
+    );
+    return matrix;
+  } catch (error) {
+    console.error('Distance Matrix取得失敗:', error);
+    return null;
+  }
+}
+
+/**
  * 全マーカー・ルートをクリア
  */
 export function clearMap() {

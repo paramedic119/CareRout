@@ -4,13 +4,8 @@ import { DEFAULT_OFFICE } from '../utils/constants.js';
 
 /**
  * 職員ごとのルートを最適化
- * @param {Array} assignments - 割り当て結果 [{ staffId, clientId }]
- * @param {Array} staffList - 職員リスト
- * @param {Array} clientList - 利用者リスト
- * @param {Object} office - 事業所情報 { lat, lng }
- * @returns {Object} 職員ID→最適化ルート のマップ
  */
-export function optimizeRoutes(assignments, staffList, clientList, office = DEFAULT_OFFICE) {
+export async function optimizeRoutes(assignments, staffList, clientList, office = DEFAULT_OFFICE, getRealMatrixFn = null) {
   // 職員ごとにグループ化
   const staffAssignments = {};
   for (const a of assignments) {
@@ -36,8 +31,13 @@ export function optimizeRoutes(assignments, staffList, clientList, office = DEFA
       ...clients.map(c => ({ id: c.id, name: c.name, lat: c.lat, lng: c.lng, duration: c.visitDuration, timeWindow: c.timeWindow })),
     ];
 
-    // 距離行列を計算
-    const distMatrix = buildDistanceMatrix(points);
+    // 距離行列を計算（実走行データがあれば優先、なければハバーサイン）
+    let realMatrix = null;
+    if (typeof getRealMatrixFn === 'function') {
+      realMatrix = await getRealMatrixFn(points);
+    }
+    
+    const distMatrix = buildDistanceMatrix(points, realMatrix);
 
     // 時間枠制約を考慮したルート最適化
     let route = nearestNeighborWithTimeWindows(points, distMatrix);
@@ -47,7 +47,7 @@ export function optimizeRoutes(assignments, staffList, clientList, office = DEFA
 
     // 結果を格納
     const totalDistance = calculateTotalDistance(route, distMatrix);
-    const schedule = buildSchedule(route, distMatrix, staff);
+    const schedule = buildSchedule(route, distMatrix, staff, realMatrix);
 
     results[staffId] = {
       staffId,
@@ -64,20 +64,24 @@ export function optimizeRoutes(assignments, staffList, clientList, office = DEFA
 }
 
 /**
- * 距離行列を構築（ハバーサイン公式）
+ * 距離行列を構築
  */
-function buildDistanceMatrix(points) {
+function buildDistanceMatrix(points, realMatrix = null) {
   const n = points.length;
   const matrix = Array.from({ length: n }, () => Array(n).fill(0));
 
   for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const dist = haversineDistance(
-        points[i].lat, points[i].lng,
-        points[j].lat, points[j].lng,
-      );
-      matrix[i][j] = dist;
-      matrix[j][i] = dist;
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      
+      if (realMatrix && realMatrix[i] && realMatrix[i][j] && realMatrix[i][j].distance !== null) {
+        matrix[i][j] = realMatrix[i][j].distance;
+      } else {
+        matrix[i][j] = haversineDistance(
+          points[i].lat, points[i].lng,
+          points[j].lat, points[j].lng,
+        );
+      }
     }
   }
 
@@ -194,16 +198,25 @@ function calculateTotalDistance(route, distMatrix) {
 /**
  * スケジュールを構築（到着時間・出発時間を計算）
  */
-function buildSchedule(route, distMatrix, staff) {
+function buildSchedule(route, distMatrix, staff, realMatrix = null) {
   const schedule = [];
-  // 平均車速: 都市部で約20km/h
+  // 平均車速: 都市部で約20km/h (Google Mapsが使えない場合のフォールバック)
   const avgSpeed = 20;
   let currentTime = timeToMin(staff?.workStart || '08:30');
 
   for (let i = 0; i < route.length; i++) {
     if (i > 0) {
-      // 移動時間（分）= 距離(km) / 速度(km/h) * 60
-      const travelTime = (distMatrix[route[i - 1]][route[i]] / avgSpeed) * 60;
+      // 移動時間（分）の計算
+      let travelTime;
+      const from = route[i - 1];
+      const to = route[i];
+
+      if (realMatrix && realMatrix[from] && realMatrix[from][to] && realMatrix[from][to].duration !== null) {
+        travelTime = realMatrix[from][to].duration;
+      } else {
+        // フォールバック: 距離(km) / 速度(km/h) * 60
+        travelTime = (distMatrix[from][to] / avgSpeed) * 60;
+      }
       currentTime += Math.ceil(travelTime);
     }
 
@@ -215,7 +228,7 @@ function buildSchedule(route, distMatrix, staff) {
 
     // 訪問先の場合、滞在時間を加算（事業所は除く）
     if (i > 0 && i < route.length - 1) {
-      currentTime += 60; // デフォルト60分（実際はclient.visitDurationを使う）
+      currentTime += 60; // デフォルト60分（実際は個別の滞在時間を使うのが望ましい）
     }
   }
 

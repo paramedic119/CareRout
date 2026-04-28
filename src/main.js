@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function showLoginScreen() {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('main-app').style.display = 'none';
+  document.getElementById('nav-revenue').style.display = 'none';
 }
 
 /**
@@ -94,6 +95,12 @@ function showMainApp(user) {
 
   // 今回のプロトタイプではデモユーザーを管理者とする
   window.isAdmin = (user.email === 'demo@careroute.local');
+
+  // 管理者メニューの表示切り替え
+  const revenueNav = document.getElementById('nav-revenue');
+  if (revenueNav) {
+    revenueNav.style.display = window.isAdmin ? 'flex' : 'none';
+  }
 
   // デモデータ投入ボタン（初回のみ）
   addDemoDataButton();

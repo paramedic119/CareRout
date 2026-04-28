@@ -5,6 +5,7 @@ import { renderStaffManage } from './pages/staff-manage.js';
 import { renderClientManage } from './pages/client-manage.js';
 import { renderSchedule } from './pages/schedule.js';
 import { renderMatching } from './pages/matching.js';
+import { renderRevenue } from './pages/revenue.js';
 
 // ページ定義
 const pages = {
@@ -14,6 +15,7 @@ const pages = {
   client: { render: renderClientManage, title: '利用者管理' },
   schedule: { render: renderSchedule, title: 'スケジュール' },
   matching: { render: renderMatching, title: 'マッチング＆最適化' },
+  revenue: { render: renderRevenue, title: '収支シミュレーション' },
 };
 
 let currentPage = 'dashboard';

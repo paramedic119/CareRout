@@ -101,48 +101,83 @@ function evaluateMatch(staff, client) {
 }
 
 /**
- * 貪欲法による自動割り当て
- * 各利用者に対して最もスコアの高い適格な職員を割り当て
- * @param {Array} staffList - 職員リスト
- * @param {Array} clientList - 利用者リスト
- * @param {number} maxVisitsPerStaff - 1人あたりの最大訪問件数
- * @returns {Array} 割り当て結果 [{ staffId, clientId, score }]
+ * 改善された自動割り当てロジック
+ * 1. 正社員を優先
+ * 2. 負荷（訪問件数）が低い職員を優先（均等化）
+ * 3. パートは1日最大5件まで
  */
-export function autoAssign(staffList, clientList, maxVisitsPerStaff = 10) {
-  const scores = calculateMatchScores(staffList, clientList);
+export function autoAssign(staffList, visitList) {
   const assignments = [];
-  const assignedClients = new Set();
+  const assignedVisits = new Set();
   const staffVisitCount = {};
+  
+  // 訪問予定（Visit）ごとにループ
+  for (const visit of visitList) {
+    // この訪問に対する各職員のマッチングスコアを計算
+    const candidates = staffList
+      .filter(s => s.isActive)
+      .map(staff => {
+        const { score, eligible } = evaluateMatch(staff, visit);
+        return { staff, score, eligible };
+      })
+      .filter(c => c.eligible);
 
-  // スコア上位から貪欲に割り当て
-  for (const match of scores) {
-    // すでに割り当て済みの利用者はスキップ
-    if (assignedClients.has(match.clientId)) continue;
+    if (candidates.length === 0) continue;
 
-    // 適格でないペアはスキップ
-    if (!match.eligible) continue;
+    // 最適な職員を決定するための重み付けソート
+    candidates.sort((a, b) => {
+      const countA = staffVisitCount[a.staff.id] || 0;
+      const countB = staffVisitCount[b.staff.id] || 0;
 
-    // 職員の訪問上限チェック
-    const count = staffVisitCount[match.staffId] || 0;
-    if (count >= maxVisitsPerStaff) continue;
+      // 1. パートの上限チェック（5件）
+      const limitA = a.staff.type === 'パート' ? 5 : 10;
+      const limitB = b.staff.type === 'パート' ? 5 : 10;
+      const isOverA = countA >= limitA;
+      const isOverB = countB >= limitB;
 
-    // 割り当て決定
-    assignments.push({
-      staffId: match.staffId,
-      staffName: match.staffName,
-      clientId: match.clientId,
-      clientName: match.clientName,
-      score: match.score,
+      if (isOverA !== isOverB) return isOverA ? 1 : -1;
+
+      // 2. 訪問件数が少ない人を優先（均等化）
+      if (countA !== countB) return countA - countB;
+
+      // 3. 正社員を優先
+      if (a.staff.type !== b.staff.type) {
+        return a.staff.type === '正社員' ? -1 : 1;
+      }
+
+      // 4. マッチングスコアで比較
+      return b.score - a.score;
     });
 
-    assignedClients.add(match.clientId);
-    staffVisitCount[match.staffId] = count + 1;
+    const bestMatch = candidates[0];
+    const currentCount = staffVisitCount[bestMatch.staff.id] || 0;
+    const limit = bestMatch.staff.type === 'パート' ? 5 : 10;
+
+    if (currentCount < limit) {
+      assignments.push({
+        staffId: bestMatch.staff.id,
+        staffName: bestMatch.staff.name,
+        visitId: visit.id,
+        clientId: visit.clientId,
+        clientName: visit.clientName || '利用者',
+        score: bestMatch.score,
+        startTime: visit.startTime,
+        endTime: visit.endTime,
+      });
+
+      assignedVisits.add(visit.id);
+      staffVisitCount[bestMatch.staff.id] = currentCount + 1;
+    }
   }
 
-  // 未割り当ての利用者リスト
-  const unassigned = clientList
-    .filter(c => c.isActive && !assignedClients.has(c.id))
-    .map(c => ({ clientId: c.id, clientName: c.name, reason: '適格な職員なし' }));
+  // 未割り当ての訪問リスト
+  const unassigned = visitList
+    .filter(v => !assignedVisits.has(v.id))
+    .map(v => ({ 
+      visitId: v.id, 
+      clientName: v.clientName || '利用者', 
+      reason: '適格な職員なし、または上限超過' 
+    }));
 
   return { assignments, unassigned };
 }
