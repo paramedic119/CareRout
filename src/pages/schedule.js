@@ -57,15 +57,50 @@ async function loadSchedule() {
     return;
   }
 
-  // 職員ごとにグループ化し、収支計算と移動時間を算出
   const grouped = {};
+  const unassignedVisits = [];
   let totalRevenue = 0;
   let totalLaborCost = 0;
   let totalVehicleCost = 0;
 
   for (const v of visits) {
-    if (!grouped[v.staffId]) grouped[v.staffId] = [];
-    grouped[v.staffId].push(v);
+    if (!v.staffId) {
+      unassignedVisits.push(v);
+    } else {
+      if (!grouped[v.staffId]) grouped[v.staffId] = [];
+      grouped[v.staffId].push(v);
+    }
+  }
+
+  // 未割り当ての訪問UI
+  let unassignedHtml = '';
+  if (unassignedVisits.length > 0) {
+    unassignedHtml = `
+      <div class="card" style="border-left: 4px solid var(--danger); margin-bottom: 24px; background: rgba(239, 68, 68, 0.05);">
+        <h3 class="card-title" style="color: var(--danger); margin-bottom: 12px;">
+          <span class="material-icons-round">warning</span>
+          未割り当ての訪問 (${unassignedVisits.length}件)
+        </h3>
+        <div class="grid grid-3" style="gap: 12px;">
+          ${unassignedVisits.map(v => {
+            const client = clientList.find(c => c.id === v.clientId);
+            return `
+              <div class="visit-card" style="border: 1px dashed var(--danger);">
+                <div style="display:flex;justify-content:space-between;align-items:start">
+                  <div>
+                    <strong>${escapeHtml(client?.name || '不明')}</strong>
+                    <div style="font-size:.8rem;color:var(--text-muted)">${v.startTime} | ${v.duration || 60}分</div>
+                  </div>
+                  <button class="btn-icon" data-delete-visit="${v.id}" style="color:var(--danger)">
+                    <span class="material-icons-round">close</span>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
   }
 
   // 移動時間と収支の計算
@@ -137,6 +172,7 @@ async function loadSchedule() {
 
   contentDiv.innerHTML = `
     ${simulationHtml}
+    ${unassignedHtml}
     <div style="margin-bottom:12px;color:var(--text-secondary)">
       ${formatDateJP(selectedDate)} — ${visits.length}件の訪問
     </div>
@@ -158,7 +194,6 @@ async function loadSchedule() {
                 const client = clientList.find(c => c.id === v.clientId);
                 const timeStr = v.startTime || v.scheduledTime || '--:--';
                 
-                // 移動時間ブロックの描画（2件目以降）
                 let travelBlock = '';
                 let warningBlock = '';
                 
@@ -168,12 +203,10 @@ async function loadSchedule() {
                    const travelTime = v.calculatedTravelTime || 10;
                    
                    if (prevTimeStr && timeStr !== '--:--') {
-                      // 重複・移動不足チェック
                       const [pH, pM] = prevTimeStr.split(':').map(Number);
                       const [cH, cM] = timeStr.split(':').map(Number);
                       const prevEndMins = pH * 60 + pM + (prev.duration || 60);
                       const currentStartMins = cH * 60 + cM;
-                      
                       const diffMins = currentStartMins - prevEndMins;
                       
                       if (diffMins < travelTime) {

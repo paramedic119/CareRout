@@ -306,12 +306,20 @@ async function saveOptimizedRoutes(staffList, routes) {
       };
     });
 
-    // 訪問予定（visits）の担当者を一括更新
-    for (const assignment of lastAssignments) {
-      if (assignment.visitId) {
-        await updateVisit(assignment.visitId, { 
+    // 全訪問予定を取得して担当者を更新
+    const allVisits = await getVisitsByDate(selectedDate);
+    for (const v of allVisits) {
+      const assignment = lastAssignments.find(a => a.visitId === v.id);
+      if (assignment) {
+        await updateVisit(v.id, { 
           staffId: assignment.staffId,
           staffName: assignment.staffName
+        });
+      } else {
+        // マッチング結果に含まれない場合は「未割り当て」にリセット
+        await updateVisit(v.id, { 
+          staffId: null,
+          staffName: '未設定'
         });
       }
     }
