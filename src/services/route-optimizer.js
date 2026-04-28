@@ -47,7 +47,7 @@ export async function optimizeRoutes(assignments, staffList, clientList, office 
 
     // 結果を格納
     const totalDistance = calculateTotalDistance(route, distMatrix);
-    const schedule = buildSchedule(route, distMatrix, staff, realMatrix);
+    const schedule = buildSchedule(route, distMatrix, staff, realMatrix, points);
 
     results[staffId] = {
       staffId,
@@ -198,37 +198,41 @@ function calculateTotalDistance(route, distMatrix) {
 /**
  * スケジュールを構築（到着時間・出発時間を計算）
  */
-function buildSchedule(route, distMatrix, staff, realMatrix = null) {
+function buildSchedule(route, distMatrix, staff, realMatrix = null, points = []) {
   const schedule = [];
   // 平均車速: 都市部で約20km/h (Google Mapsが使えない場合のフォールバック)
   const avgSpeed = 20;
   let currentTime = timeToMin(staff?.workStart || '08:30');
 
   for (let i = 0; i < route.length; i++) {
+    let travelTime = 0;
     if (i > 0) {
       // 移動時間（分）の計算
-      let travelTime;
       const from = route[i - 1];
       const to = route[i];
 
       if (realMatrix && realMatrix[from] && realMatrix[from][to] && realMatrix[from][to].duration !== null) {
         travelTime = realMatrix[from][to].duration;
       } else {
-        // フォールバック: 距離(km) / 速度(km/h) * 60
+        // フォールバック
         travelTime = (distMatrix[from][to] / avgSpeed) * 60;
       }
       currentTime += Math.ceil(travelTime);
     }
 
+    const point = points[route[i]];
     schedule.push({
       pointIndex: route[i],
+      clientId: point ? point.id : null,
       arrivalTime: minToTime(currentTime),
       arrivalMinutes: currentTime,
+      travelTimeFromPrev: Math.ceil(travelTime),
     });
 
     // 訪問先の場合、滞在時間を加算（事業所は除く）
     if (i > 0 && i < route.length - 1) {
-      currentTime += 60; // デフォルト60分（実際は個別の滞在時間を使うのが望ましい）
+      const visitDuration = point ? (point.duration || 60) : 60;
+      currentTime += visitDuration;
     }
   }
 
