@@ -342,6 +342,30 @@ input:focus, select:focus, textarea:focus {
   animation: spin 1s linear infinite;
 }
 
+/* --- モバイルヘッダー --- */
+.mobile-header {
+  display: none;
+  height: var(--header-height);
+  background: var(--bg-darker);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 150;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(4px);
+  z-index: 190;
+  animation: fadeIn .2s ease;
+}
+
 /* --- アニメーション --- */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -351,15 +375,54 @@ input:focus, select:focus, textarea:focus {
 
 /* --- レスポンシブ --- */
 @media (max-width: 768px) {
-  .sidebar { position: fixed; left: -260px; height: 100vh; z-index: 200; transition: left var(--transition); }
+  body { overflow: auto; }
+  .main-app { flex-direction: column; }
+  .mobile-header { display: flex; }
+  
+  .sidebar { 
+    position: fixed; 
+    left: -260px; 
+    height: 100vh; 
+    z-index: 200; 
+    transition: left var(--transition);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+  }
   .sidebar.open { left: 0; }
-  .form-row { grid-template-columns: 1fr; }
+  .sidebar-overlay.open { display: block; }
+  
+  .main-content { 
+    padding-top: var(--header-height); 
+    height: auto; 
+    overflow: visible;
+  }
+  
   .page-container { padding: 16px; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+  
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  
+  .map-container { height: 60vh; }
+  .map-overlay { 
+    position: static; 
+    margin-top: 12px; 
+    width: 100%; 
+    max-height: none; 
+  }
+  
+  .form-row { grid-template-columns: 1fr; }
+  .btn-group { width: 100%; }
+  .btn-group .btn, .btn-group .form-input, .btn-group .form-select { flex: 1; min-width: 120px; }
+
+  .stat-card { padding: 16px; }
+  .stat-value { font-size: 1.5rem; }
+  
+  .data-table { font-size: 0.85rem; }
+  .data-table th, .data-table td { padding: 8px; }
 }
 
 /* --- 印刷 --- */
 @media print {
-  .sidebar, .toast-container, .modal-overlay { display: none !important; }
-  .main-content { margin: 0; }
-  body { background: #fff; color: #000; }
+  .sidebar, .toast-container, .modal-overlay, .mobile-header { display: none !important; }
+  .main-content { margin: 0; padding: 0 !important; }
+  body { background: #fff; color: #000; overflow: visible; height: auto; }
 }

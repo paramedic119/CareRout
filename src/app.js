@@ -38,6 +38,18 @@ export function initRouter() {
     document.getElementById('sidebar').classList.toggle('collapsed');
   });
 
+  // モバイルメニューの開閉
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  
+  const toggleMobileMenu = () => {
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+  };
+
+  document.getElementById('btn-mobile-menu')?.addEventListener('click', toggleMobileMenu);
+  overlay?.addEventListener('click', toggleMobileMenu);
+
   // モーダル閉じる
   document.getElementById('btn-modal-close')?.addEventListener('click', () => {
     document.getElementById('modal-overlay').style.display = 'none';
@@ -64,6 +76,10 @@ export async function navigateTo(pageName) {
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.toggle('active', item.dataset.page === pageName);
   });
+
+  // モバイルメニューを閉じる
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebar-overlay')?.classList.remove('open');
 
   // ページタイトルを更新
   document.title = `${page.title} - CareRoute`;
