@@ -1,5 +1,5 @@
 // マッチング＆最適化画面
-import { getStaffList, getClientList, saveRoutes, getVisitsByDate } from '../services/firestore.js';
+import { getStaffList, getClientList, saveRoutes, getVisitsByDate, updateVisit } from '../services/firestore.js';
 import { autoAssign, getScoreLevel } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
 import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
@@ -248,8 +248,18 @@ async function saveOptimizedRoutes(staffList, routes) {
       };
     });
 
+    // 訪問予定（visits）の担当者を一括更新
+    for (const assignment of lastAssignments) {
+      if (assignment.visitId) {
+        await updateVisit(assignment.visitId, { 
+          staffId: assignment.staffId,
+          staffName: assignment.staffName
+        });
+      }
+    }
+
     await saveRoutes(finalRoutes);
-    showToast('ルートを保存しました。マップビューで確認できます。', 'success');
+    showToast('スケジュールとルートを保存しました！', 'success');
   } catch (e) {
     showToast('保存に失敗しました: ' + e.message, 'error');
   }
