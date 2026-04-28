@@ -261,6 +261,7 @@ async function saveOptimizedRoutes(staffList, routes) {
         clientIds: assignedClients,
         totalDistance: route.totalDistance,
         totalDuration: route.totalDuration,
+        schedule: route.schedule,
       };
     });
 

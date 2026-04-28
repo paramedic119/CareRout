@@ -108,7 +108,7 @@ async function loadAndDisplayRevenue() {
         const start = r.schedule[0].arrivalMinutes;
         const end = r.schedule[r.schedule.length - 1].arrivalMinutes;
         workMinutes = end - start;
-        laborCost = (workMinutes / 60) * (staff.wage || 2000);
+        laborCost = (workMinutes / 60) * (parseInt(staff.wage) || 2000);
       }
     });
 

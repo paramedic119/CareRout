@@ -1,5 +1,5 @@
 // スケジュール管理画面
-import { getStaffList, getClientList, getVisitsByDate, addVisit, deleteVisit } from '../services/firestore.js';
+import { getStaffList, getClientList, getVisitsByDate, addVisit, deleteVisit, getRoutesByDate } from '../services/firestore.js';
 import { SERVICE_TYPES } from '../utils/constants.js';
 import { today, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
 
@@ -78,6 +78,11 @@ async function loadSchedule() {
       const hourlyWage = parseInt(staff.wage) || 1500;
       const staffRoute = routes.find(r => r.staffId === staffId);
 
+      // 移動コストの加算
+      if (staffRoute) {
+        totalVehicleCost += (staffRoute.totalDistance || 0) * 25;
+      }
+
       // 訪問を時間順にソート
       staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
 
@@ -87,28 +92,16 @@ async function loadSchedule() {
         // 人件費
         totalLaborCost += hourlyWage * ((v.duration || 60) / 60);
 
-        // 移動時間の特定（保存されたルートがあればそれを使用、なければデフォルト）
+        // 移動時間の特定
         let travelTime = 10;
         if (staffRoute && staffRoute.schedule) {
-          // ルート内の現在地点を探す
           const currentPoint = staffRoute.schedule.find(p => p.clientId === v.clientId);
           if (currentPoint) {
-            // 前の地点からの移動時間を取得（route-optimizerで計算済み）
             travelTime = currentPoint.travelTimeFromPrev || 10;
           }
         }
-        v.calculatedTravelTime = travelTime; // 描画時に使用できるように保存
+        v.calculatedTravelTime = travelTime;
       });
-    }
-    for (const [staffId, staffVisits] of Object.entries(grouped)) {
-      const staff = staffList.find(s => s.id === staffId);
-      if (!staff) continue;
-      const staffRoute = routes.find(r => r.staffId === staffId);
-      
-      // 収支用の移動コスト加算
-      if (staffRoute) {
-        totalVehicleCost += (staffRoute.totalDistance || 0) * 25; // 25円/km
-      }
     }
 
     const profit = totalRevenue - totalLaborCost - totalVehicleCost;
