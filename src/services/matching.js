@@ -102,48 +102,67 @@ function evaluateMatch(staff, client) {
 
 /**
  * 改善された自動割り当てロジック
- * 1. 正社員を優先
- * 2. 負荷（訪問件数）が低い職員を優先（均等化）
- * 3. パートは1日最大5件まで
  */
-export function autoAssign(staffList, visitList) {
+export function autoAssign(staffList, visitList, globalMatrix = null, points = []) {
   const assignments = [];
   const assignedVisits = new Set();
   const staffVisitCount = {};
   
-  // 訪問予定（Visit）ごとにループ
-  for (const visit of visitList) {
-    // この訪問に対する各職員のマッチングスコアを計算
+  // 地点IDから行列のインデックスを引くためのマップ
+  const pointIndexMap = {};
+  points.forEach((p, idx) => { pointIndexMap[p.id] = idx; });
+
+  // 移動時間を取得するヘルパー
+  const getMoveTime = (fromId, toId) => {
+    if (!globalMatrix) return 15; // 行列がない場合はデフォルト15分
+    const fromIdx = pointIndexMap[fromId];
+    const toIdx = pointIndexMap[toId];
+    if (fromIdx !== undefined && toIdx !== undefined && globalMatrix[fromIdx][toIdx]) {
+      return globalMatrix[fromIdx][toIdx].duration || 15;
+    }
+    return 15;
+  };
+
+  // 訪問予定を開始時間順にソート
+  const sortedVisits = [...visitList].sort((a, b) => {
+    const timeA = a.startTime || a.scheduledTime || '00:00';
+    const timeB = b.startTime || b.scheduledTime || '00:00';
+    return timeA.localeCompare(timeB);
+  });
+  
+  for (const visit of sortedVisits) {
     const candidates = staffList
       .filter(s => s.isActive)
       .map(staff => {
         const { score, eligible: matchEligible } = evaluateMatch(staff, visit);
         
-        // 時間重複および移動時間のチェック
         let timeEligible = true;
         const staffAssignments = assignments.filter(a => a.staffId === staff.id);
         
         if (staffAssignments.length > 0) {
-          const vStart = timeToMinutes(visit.startTime);
+          const vTimeStr = visit.startTime || visit.scheduledTime || '00:00';
+          const vStart = timeToMinutes(vTimeStr);
           const vEnd = vStart + (visit.duration || 60);
 
           for (const existing of staffAssignments) {
-            const eStart = timeToMinutes(existing.startTime);
+            const eTimeStr = existing.startTime || existing.scheduledTime || '00:00';
+            const eStart = timeToMinutes(eTimeStr);
             const eEnd = eStart + (existing.duration || 60);
             
-            // 1. 完全な時間の重なりチェック
-            const overlap = (vStart < eEnd && vEnd > eStart);
-            if (overlap) {
+            // 1. 時間の重なりチェック
+            if (vStart < eEnd && vEnd > eStart) {
               timeEligible = false;
               break;
             }
 
-            // 2. 移動時間の確保チェック（暫定で前後15分は空ける）
-            const travelBuffer = 15;
-            const tight = (Math.abs(vStart - eEnd) < travelBuffer || Math.abs(eStart - vEnd) < travelBuffer);
-            if (tight) {
-              // 完全にNGにはせず、スコアを大幅に減点するか、今回は厳格にfalseにする
-              // ユーザーの要望「マッチングで修正できない？」に応え、厳格に弾く
+            // 2. 実走行時間に基づく移動時間の確保チェック
+            const travelTime = getMoveTime(existing.clientId, visit.clientId);
+            const diff = Math.min(
+              Math.abs(vStart - eEnd), 
+              Math.abs(eStart - vEnd)
+            );
+            
+            if (diff < travelTime) {
               timeEligible = false;
               break;
             }

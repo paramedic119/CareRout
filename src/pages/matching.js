@@ -73,10 +73,26 @@ async function runOptimization() {
       return;
     }
 
-    // Step 1: マッチング
+    // 全地点（事業所 + 全利用者）の座標リストを作成
+    const allPoints = [
+      { id: 'office', ...DEFAULT_OFFICE },
+      ...clientList.map(c => ({ id: c.id, lat: c.lat, lng: c.lng }))
+    ];
+
+    let globalDistanceMatrix = null;
+    try {
+      await loadGoogleMapsAPI();
+      globalDistanceMatrix = await getDistanceMatrix(allPoints);
+    } catch (e) {
+      console.warn('全体距離行列の取得に失敗:', e);
+    }
+
+    // Step 1: マッチング（実走行マトリックスを渡す）
     const { assignments, unassigned } = autoAssign(
       staffList.filter(s => s.isActive),
       visits,
+      globalDistanceMatrix,
+      allPoints
     );
     lastAssignments = assignments;
 

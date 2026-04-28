@@ -39,10 +39,11 @@ export async function renderSchedule() {
 
 async function loadSchedule() {
   const contentDiv = document.getElementById('schedule-content');
-  const [staffList, clientList, visits] = await Promise.all([
+  const [staffList, clientList, visits, routes] = await Promise.all([
     getStaffList().catch(() => []),
     getClientList().catch(() => []),
     getVisitsByDate(selectedDate).catch(() => []),
+    getRoutesByDate(selectedDate).catch(() => []),
   ]);
 
   if (visits.length === 0) {
@@ -75,47 +76,39 @@ async function loadSchedule() {
       const staff = staffList.find(s => s.id === staffId);
       if (!staff) continue;
       const hourlyWage = parseInt(staff.wage) || 1500;
+      const staffRoute = routes.find(r => r.staffId === staffId);
 
       // 訪問を時間順にソート
       staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
 
-      let prevClientArea = null;
-      
       staffVisits.forEach((v, index) => {
         // 売上
-        totalRevenue += parseInt(v.income) || 3000; // デフォルト売上
-        // 人件費（所要時間から算出）
-        const hours = (v.duration || 60) / 60;
-        totalLaborCost += hourlyWage * hours;
+        totalRevenue += parseInt(v.income) || 3000;
+        // 人件費
+        totalLaborCost += hourlyWage * ((v.duration || 60) / 60);
 
-        // 移動費の計算
-        const client = clientList.find(c => c.id === v.clientId);
-        const currentArea = client ? client.area : null;
-        
-        let travelDistance = 0;
-        let travelTime = 0;
-
-        if (index === 0) {
-          // 最初の訪問（拠点から）
-          travelDistance = 4; // 仮:拠点から4km
-        } else {
-          // 直前の訪問からの移動
-          if (prevClientArea && currentArea && prevClientArea !== currentArea) {
-            travelDistance = 8;
-            travelTime = 20;
-          } else {
-            travelDistance = 4;
-            travelTime = 10;
+        // 移動時間の特定（保存されたルートがあればそれを使用、なければデフォルト）
+        let travelTime = 10;
+        if (staffRoute && staffRoute.schedule) {
+          // ルート内の現在地点を探す
+          const currentPoint = staffRoute.schedule.find(p => p.clientId === v.clientId);
+          if (currentPoint) {
+            // 前の地点からの移動時間を取得（route-optimizerで計算済み）
+            travelTime = currentPoint.travelTimeFromPrev || 10;
           }
         }
-        
-        v.calculatedTravelTime = travelTime;
-        totalVehicleCost += travelDistance * 25; // 25円/km
-        prevClientArea = currentArea;
+        v.calculatedTravelTime = travelTime; // 描画時に使用できるように保存
       });
-
-      // 最後の退勤移動（仮）
-      totalVehicleCost += 4 * 25; 
+    }
+    for (const [staffId, staffVisits] of Object.entries(grouped)) {
+      const staff = staffList.find(s => s.id === staffId);
+      if (!staff) continue;
+      const staffRoute = routes.find(r => r.staffId === staffId);
+      
+      // 収支用の移動コスト加算
+      if (staffRoute) {
+        totalVehicleCost += (staffRoute.totalDistance || 0) * 25; // 25円/km
+      }
     }
 
     const profit = totalRevenue - totalLaborCost - totalVehicleCost;
