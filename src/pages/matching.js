@@ -7,6 +7,7 @@ import { showToast, today, formatDateJP, escapeHtml } from '../utils/helpers.js'
 
 let lastAssignments = null;
 let lastRoutes = null;
+let selectedDate = today();
 
 export async function renderMatching() {
   const container = document.getElementById('page-container');
@@ -17,14 +18,17 @@ export async function renderMatching() {
         <span class="material-icons-round">auto_fix_high</span>
         マッチング＆ルート最適化
       </h1>
-      <span style="color:var(--text-secondary)">${formatDateJP(new Date())}</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="date" id="match-date-picker" class="form-input" value="${selectedDate}" style="width:160px">
+        <span style="color:var(--text-secondary)">の予定を最適化</span>
+      </div>
     </div>
 
     <!-- 実行ボタン -->
     <div class="card" style="margin-bottom:24px;text-align:center;padding:32px">
       <h3 style="margin-bottom:8px">自動マッチング＆ルート最適化</h3>
       <p style="color:var(--text-secondary);margin-bottom:20px">
-        職員のスキルと利用者のニーズを照合し、最適な割り当てとルートを算出します
+        職員のスキルと利用者のニーズを照合し、選択された日付の最適な割り当てを算出します
       </p>
       <button class="btn btn-primary" id="btn-run-optimization" style="padding:14px 40px;font-size:1rem">
         <span class="material-icons-round">play_arrow</span>
@@ -36,6 +40,10 @@ export async function renderMatching() {
     <div id="optimization-results"></div>
   `;
 
+  document.getElementById('match-date-picker').addEventListener('change', (e) => {
+    selectedDate = e.target.value;
+  });
+
   document.getElementById('btn-run-optimization').addEventListener('click', runOptimization);
 }
 
@@ -45,36 +53,47 @@ async function runOptimization() {
 
   btn.disabled = true;
   btn.innerHTML = '<span class="material-icons-round" style="animation:spin 1s linear infinite">sync</span> 最適化中...';
+  resultsDiv.innerHTML = '';
 
   try {
     // データ取得
-    const [staffList, clientList] = await Promise.all([
+    const [staffList, clientList, visits] = await Promise.all([
       getStaffList(),
       getClientList(),
+      getVisitsByDate(selectedDate),
     ]);
 
     if (staffList.length === 0) {
       showToast('職員が登録されていません', 'warning');
       return;
     }
-    if (clientList.length === 0) {
-      showToast('利用者が登録されていません', 'warning');
+    if (visits.length === 0) {
+      showToast(`${formatDateJP(new Date(selectedDate))} の訪問予定がありません。スケジュール画面で予定を作成してください。`, 'warning');
+      return;
+    }
+
+    // 本日訪問予定がある利用者のみを抽出
+    const visitingClientIds = [...new Set(visits.map(v => v.clientId))];
+    const targetClients = clientList.filter(c => c.isActive && visitingClientIds.includes(c.id));
+
+    if (targetClients.length === 0) {
+      showToast('対象となるアクティブな利用者がいません', 'warning');
       return;
     }
 
     // Step 1: マッチング
     const { assignments, unassigned } = autoAssign(
       staffList.filter(s => s.isActive),
-      clientList.filter(c => c.isActive),
+      targetClients,
     );
     lastAssignments = assignments;
 
     // Step 2: ルート最適化
-    const routes = optimizeRoutes(assignments, staffList, clientList, DEFAULT_OFFICE);
+    const routes = optimizeRoutes(assignments, staffList, targetClients, DEFAULT_OFFICE);
     lastRoutes = routes;
 
     // 結果表示
-    resultsDiv.innerHTML = renderResults(staffList, clientList, assignments, unassigned, routes);
+    resultsDiv.innerHTML = renderResults(staffList, targetClients, assignments, unassigned, routes);
 
     // 保存ボタンのイベント
     document.getElementById('btn-save-routes')?.addEventListener('click', async () => {
@@ -216,7 +235,7 @@ async function saveOptimizedRoutes(staffList, routes) {
         .map(a => a.clientId);
       return {
         staffId,
-        date: today(),
+        date: selectedDate,
         clientIds: assignedClients,
         totalDistance: route.totalDistance,
         totalDuration: route.totalDuration,
