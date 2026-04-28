@@ -150,7 +150,13 @@ export async function saveRoutes(routesArray) {
   if (!isFirebaseConfigured) {
     const col = getLocalCollection('routes');
     for (const route of routesArray) {
-      col.push({ id: generateId(), ...route, createdAt: new Date().toISOString() });
+      // ローカルでも上書きロジック
+      const existingIdx = col.findIndex(r => r.staffId === route.staffId && r.date === route.date);
+      if (existingIdx >= 0) {
+        col[existingIdx] = { ...route, updatedAt: new Date().toISOString() };
+      } else {
+        col.push({ id: generateId(), ...route, createdAt: new Date().toISOString() });
+      }
     }
     saveLocalCollection('routes');
     return;
@@ -158,8 +164,10 @@ export async function saveRoutes(routesArray) {
   const mod = await getFirestoreMod();
   const batch = mod.writeBatch(db);
   for (const route of routesArray) {
-    const ref = mod.doc(mod.collection(db, 'routes'));
-    batch.set(ref, { ...route, createdAt: mod.serverTimestamp() });
+    // 日付と職員IDを組み合わせた固定IDで上書きを実現
+    const docId = `${route.date}_${route.staffId}`;
+    const ref = mod.doc(db, 'routes', docId);
+    batch.set(ref, { ...route, updatedAt: mod.serverTimestamp() }, { merge: true });
   }
   await batch.commit();
 }

@@ -276,22 +276,7 @@ function renderResults(staffList, clientList, assignments, unassigned, routes) {
 
 async function saveOptimizedRoutes(staffList, routes) {
   try {
-    const routeDocuments = Object.entries(routes).map(([staffId, route]) => ({
-      staffId,
-      date: today(),
-      clientIds: route.route
-        .slice(1, -1) // 事業所を除く
-        .map(idx => {
-          // routeのindexからclient IDを復元する（scheduleから取得）
-          return route.schedule[idx]?.clientId;
-        })
-        .filter(Boolean),
-      totalDistance: route.totalDistance,
-      totalDuration: route.totalDuration,
-      schedule: route.schedule,
-    }));
-
-    // clientIdsが空の場合、assignmentsから復元
+    // 選択された日付に基づいてルートドキュメントを生成
     const finalRoutes = Object.entries(routes).map(([staffId, route]) => {
       const assignedClients = lastAssignments
         .filter(a => a.staffId === staffId)
