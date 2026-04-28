@@ -1,6 +1,6 @@
 // マッチングエンジン — 職員と利用者のスキルベース自動割り当て
 import { MATCHING_WEIGHTS } from '../utils/constants.js';
-import { haversineDistance } from '../utils/helpers.js';
+import { haversineDistance, timeToMinutes } from '../utils/helpers.js';
 
 /**
  * 全職員×全利用者のマッチスコアを計算
@@ -117,8 +117,40 @@ export function autoAssign(staffList, visitList) {
     const candidates = staffList
       .filter(s => s.isActive)
       .map(staff => {
-        const { score, eligible } = evaluateMatch(staff, visit);
-        return { staff, score, eligible };
+        const { score, eligible: matchEligible } = evaluateMatch(staff, visit);
+        
+        // 時間重複および移動時間のチェック
+        let timeEligible = true;
+        const staffAssignments = assignments.filter(a => a.staffId === staff.id);
+        
+        if (staffAssignments.length > 0) {
+          const vStart = timeToMinutes(visit.startTime);
+          const vEnd = vStart + (visit.duration || 60);
+
+          for (const existing of staffAssignments) {
+            const eStart = timeToMinutes(existing.startTime);
+            const eEnd = eStart + (existing.duration || 60);
+            
+            // 1. 完全な時間の重なりチェック
+            const overlap = (vStart < eEnd && vEnd > eStart);
+            if (overlap) {
+              timeEligible = false;
+              break;
+            }
+
+            // 2. 移動時間の確保チェック（暫定で前後15分は空ける）
+            const travelBuffer = 15;
+            const tight = (Math.abs(vStart - eEnd) < travelBuffer || Math.abs(eStart - vEnd) < travelBuffer);
+            if (tight) {
+              // 完全にNGにはせず、スコアを大幅に減点するか、今回は厳格にfalseにする
+              // ユーザーの要望「マッチングで修正できない？」に応え、厳格に弾く
+              timeEligible = false;
+              break;
+            }
+          }
+        }
+
+        return { staff, score, eligible: matchEligible && timeEligible };
       })
       .filter(c => c.eligible);
 
