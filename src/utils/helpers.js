@@ -40,6 +40,7 @@ export function minutesToTime(minutes) {
  * 「HH:MM」形式を分に変換
  */
 export function timeToMinutes(time) {
+  if (!time) return 0;
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
 }
@@ -140,4 +141,36 @@ export function confirmDialog(title, message) {
     document.getElementById('confirm-ok').onclick = () => { closeModal(); resolve(true); };
     document.getElementById('confirm-cancel').onclick = () => { closeModal(); resolve(false); };
   });
+}
+
+/**
+ * サービス種別と所要時間（分）から介護報酬額を計算
+ * @param {string} serviceType - サービス種別（'身体介護' 等）
+ * @param {number} duration - 所要時間（分）
+ * @returns {number} 報酬額（円）
+ */
+export function calculateVisitIncome(serviceType, duration) {
+  // 遅延インポートを避けるため、ここではインラインで定義
+  // constants.js の REVENUE_TABLE と同期を保つこと
+  const table = {
+    '身体介護': { 20: 1670, 30: 2500, 60: 3960, 90: 5790, 120: 7630 },
+    '生活援助': { 20: 1830, 45: 2250, 60: 2870 },
+    '通院等乗降介助': { per_trip: 990 },
+    '医療的ケア': { 30: 3000, 60: 5000 },
+  };
+
+  const serviceTable = table[serviceType];
+  if (!serviceTable) return 3000; // テーブルにないサービスはデフォルト
+
+  // 通院等乗降介助は1回あたり固定
+  if (serviceTable.per_trip) return serviceTable.per_trip;
+
+  // 所要時間に最も適合する時間枠を選択（超えない最大の枠）
+  const durations = Object.keys(serviceTable).map(Number).sort((a, b) => a - b);
+  let matchedKey = durations[0]; // 最小枠をデフォルト
+  for (const d of durations) {
+    if (duration >= d) matchedKey = d;
+  }
+
+  return serviceTable[matchedKey] || 3000;
 }

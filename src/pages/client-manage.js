@@ -1,7 +1,8 @@
 // 利用者管理画面
 import { getClientList, addClient, updateClient, deleteClient, getVisitList } from '../services/firestore.js';
-import { CARE_LEVELS, SERVICE_TYPES, GENDER_PREFERENCES, SKILL_CATEGORIES } from '../utils/constants.js';
+import { CARE_LEVELS, SERVICE_TYPES, GENDER_PREFERENCES, SKILL_CATEGORIES, DEFAULT_OFFICE } from '../utils/constants.js';
 import { showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
+import { loadGoogleMapsAPI, geocodeAddress } from '../services/google-maps.js';
 
 let currentClientList = [];
 let allVisits = [];
@@ -114,8 +115,8 @@ function openClientForm(client = null) {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">住所</label>
-        <input class="form-input" id="cf-address" value="${client?.address || ''}" placeholder="例: 東京都新宿区..." />
+        <label class="form-label">住所 <span style="font-size:.75rem;color:var(--text-muted)">（入力すると地図上の座標を自動取得します）</span></label>
+        <input class="form-input" id="cf-address" value="${client?.address || ''}" placeholder="例: 岐阜県加茂郡富加町..." />
       </div>
       <div class="form-group">
         <label class="form-label">必要サービス</label>
@@ -174,10 +175,37 @@ function openClientForm(client = null) {
     const name = document.getElementById('cf-name').value.trim();
     if (!name) { showToast('氏名を入力してください', 'warning'); return; }
 
+    const saveBtn = document.getElementById('cf-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    const address = document.getElementById('cf-address').value.trim();
+
+    // 住所からジオコーディングで座標を取得
+    let lat = client?.lat || DEFAULT_OFFICE.lat;
+    let lng = client?.lng || DEFAULT_OFFICE.lng;
+
+    if (address) {
+      try {
+        await loadGoogleMapsAPI();
+        const coords = await geocodeAddress(address);
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
+          showToast(`座標を取得しました: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`, 'success');
+        } else {
+          showToast('住所から座標を取得できませんでした。事業所付近の座標を使用します。', 'warning');
+        }
+      } catch (e) {
+        console.warn('ジオコーディング失敗:', e);
+        showToast('座標取得に失敗。事業所付近の座標を使用します。', 'warning');
+      }
+    }
+
     const data = {
       name,
       careLevel: document.getElementById('cf-care-level').value,
-      address: document.getElementById('cf-address').value.trim(),
+      address,
       requiredServices: Array.from(document.querySelectorAll('input[name="cf-service"]:checked')).map(c => c.value),
       requiredSkills: Array.from(document.querySelectorAll('input[name="cf-skill"]:checked')).map(c => c.value),
       genderPreference: document.getElementById('cf-gender-pref').value,
@@ -187,8 +215,8 @@ function openClientForm(client = null) {
         end: document.getElementById('cf-time-end').value,
       },
       notes: document.getElementById('cf-notes').value.trim(),
-      lat: client?.lat || 35.69 + Math.random() * 0.03,
-      lng: client?.lng || 139.69 + Math.random() * 0.05,
+      lat,
+      lng,
       isActive: true,
     };
 
@@ -204,6 +232,9 @@ function openClientForm(client = null) {
       await renderClientManage();
     } catch (e) {
       showToast('保存に失敗しました: ' + e.message, 'error');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEdit ? '更新' : '登録';
     }
   };
 }

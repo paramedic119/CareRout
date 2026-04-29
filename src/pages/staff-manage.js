@@ -1,7 +1,8 @@
 // 職員管理画面
 import { getStaffList, addStaff, updateStaff, deleteStaff } from '../services/firestore.js';
-import { SKILL_CATEGORIES, GENDERS, STAFF_COLORS } from '../utils/constants.js';
+import { SKILL_CATEGORIES, GENDERS, STAFF_COLORS, DEFAULT_OFFICE } from '../utils/constants.js';
 import { showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
+import { loadGoogleMapsAPI, geocodeAddress } from '../services/google-maps.js';
 
 let currentStaffList = [];
 
@@ -106,8 +107,8 @@ function openStaffForm(staff = null) {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">住所</label>
-        <input class="form-input" id="sf-address" value="${staff?.address || ''}" placeholder="例: 東京都新宿区..." />
+        <label class="form-label">住所 <span style="font-size:.75rem;color:var(--text-muted)">（入力すると座標を自動取得）</span></label>
+        <input class="form-input" id="sf-address" value="${staff?.address || ''}" placeholder="例: 岐阜県加茂郡富加町..." />
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -147,14 +148,39 @@ function openStaffForm(staff = null) {
     const name = document.getElementById('sf-name').value.trim();
     if (!name) { showToast('氏名を入力してください', 'warning'); return; }
 
+    const saveBtn = document.getElementById('sf-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    const address = document.getElementById('sf-address').value.trim();
+
+    // 住所からジオコーディングで座標を取得
+    let lat = staff?.lat || DEFAULT_OFFICE.lat;
+    let lng = staff?.lng || DEFAULT_OFFICE.lng;
+
+    if (address) {
+      try {
+        await loadGoogleMapsAPI();
+        const coords = await geocodeAddress(address);
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
+        } else {
+          showToast('住所から座標を取得できませんでした', 'warning');
+        }
+      } catch (e) {
+        console.warn('ジオコーディング失敗:', e);
+      }
+    }
+
     const data = {
       name,
       gender: document.getElementById('sf-gender').value,
-      address: document.getElementById('sf-address').value.trim(),
+      address,
       workStart: document.getElementById('sf-work-start').value,
       workEnd: document.getElementById('sf-work-end').value,
-      lat: staff?.lat || 35.69 + Math.random() * 0.03,
-      lng: staff?.lng || 139.69 + Math.random() * 0.05,
+      lat,
+      lng,
       skills: {},
       color: staff?.color || STAFF_COLORS[currentStaffList.length % STAFF_COLORS.length],
       isActive: true,
@@ -177,6 +203,9 @@ function openStaffForm(staff = null) {
       await renderStaffManage();
     } catch (e) {
       showToast('保存に失敗しました: ' + e.message, 'error');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEdit ? '更新' : '登録';
     }
   };
 }

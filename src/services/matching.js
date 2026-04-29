@@ -103,7 +103,7 @@ function evaluateMatch(staff, client) {
 /**
  * 改善された自動割り当てロジック
  */
-export function autoAssign(staffList, visitList, globalMatrix = null, points = []) {
+export function autoAssign(staffList, visitList, clientList = [], globalMatrix = null, points = []) {
   const assignments = [];
   const assignedVisits = new Set();
   const staffVisitCount = {};
@@ -134,7 +134,9 @@ export function autoAssign(staffList, visitList, globalMatrix = null, points = [
     const candidates = staffList
       .filter(s => s.isActive)
       .map(staff => {
-        const { score, eligible: matchEligible } = evaluateMatch(staff, visit);
+        // visitから利用者データを引き当ててスキルチェックに使用
+        const client = clientList.find(c => c.id === visit.clientId);
+        const { score, eligible: matchEligible } = evaluateMatch(staff, client || visit);
         
         let timeEligible = true;
         const staffAssignments = assignments.filter(a => a.staffId === staff.id);
@@ -155,16 +157,22 @@ export function autoAssign(staffList, visitList, globalMatrix = null, points = [
               break;
             }
 
-            // 2. 実走行時間に基づく移動時間の確保チェック
+            // 2. 実走行時間に基づく移動時間の確保チェック（方向別）
             const travelTime = getMoveTime(existing.clientId, visit.clientId);
-            const diff = Math.min(
-              Math.abs(vStart - eEnd), 
-              Math.abs(eStart - vEnd)
-            );
             
-            if (diff < travelTime) {
-              timeEligible = false;
-              break;
+            // 新しい訪問が既存の「後」に来る場合
+            if (vStart >= eEnd) {
+              if ((vStart - eEnd) < travelTime) {
+                timeEligible = false;
+                break;
+              }
+            }
+            // 新しい訪問が既存の「前」に来る場合
+            else if (vEnd <= eStart) {
+              if ((eStart - vEnd) < travelTime) {
+                timeEligible = false;
+                break;
+              }
             }
           }
         }
@@ -180,9 +188,9 @@ export function autoAssign(staffList, visitList, globalMatrix = null, points = [
       const countA = staffVisitCount[a.staff.id] || 0;
       const countB = staffVisitCount[b.staff.id] || 0;
 
-      // 1. パートの上限チェック（5件）
-      const limitA = a.staff.type === 'パート' ? 5 : 10;
-      const limitB = b.staff.type === 'パート' ? 5 : 10;
+      // 1. パートの上限チェック（個別設定があればそれを優先）
+      const limitA = a.staff.maxVisits || (a.staff.type === 'パート' ? 5 : 10);
+      const limitB = b.staff.maxVisits || (b.staff.type === 'パート' ? 5 : 10);
       const isOverA = countA >= limitA;
       const isOverB = countB >= limitB;
 
@@ -202,7 +210,7 @@ export function autoAssign(staffList, visitList, globalMatrix = null, points = [
 
     const bestMatch = candidates[0];
     const currentCount = staffVisitCount[bestMatch.staff.id] || 0;
-    const limit = bestMatch.staff.type === 'パート' ? 5 : 10;
+    const limit = bestMatch.staff.maxVisits || (bestMatch.staff.type === 'パート' ? 5 : 10);
 
     if (currentCount < limit) {
       assignments.push({
@@ -239,7 +247,7 @@ export function autoAssign(staffList, visitList, globalMatrix = null, points = [
  * マッチスコアのレベルを返す
  */
 export function getScoreLevel(score) {
-  if (score >= 200) return 'high';
-  if (score >= 100) return 'medium';
+  if (score >= 2000) return 'high';   // 性別希望+スキル合致
+  if (score >= 1000) return 'medium'; // スキル合致のみ
   return 'low';
 }

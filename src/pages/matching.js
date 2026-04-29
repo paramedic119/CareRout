@@ -132,6 +132,7 @@ async function runOptimization() {
     const { assignments, unassigned } = autoAssign(
       activeStaff,
       visits,
+      clientList,
       globalDistanceMatrix,
       allPoints
     );
@@ -218,7 +219,7 @@ function renderResults(staffList, clientList, assignments, unassigned, routes) {
                 </div>
                 ${escapeHtml(data.staff?.name || '不明')}
               </h3>
-              <span style="font-size:.8rem;color:var(--text-muted)">${route?.totalDistance || 0}km</span>
+              <span style="font-size:.8rem;color:var(--text-muted)">${(route?.totalDistance || 0).toFixed(1)}km</span>
             </div>
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:4px">
@@ -233,14 +234,11 @@ function renderResults(staffList, clientList, assignments, unassigned, routes) {
                       ${s.arrivalTime} 事業所帰着
                     </div>`;
                   }
-                  const client = data.clients.find(c => {
-                    const idx = route.route[route.schedule.indexOf(s)];
-                    return true;
-                  });
+                  const matchedClient = data.clients.find(c => c.clientId === s.clientId);
                   return `<div class="visit-card">
                     <div style="display:flex;justify-content:space-between;align-items:center">
-                      <strong style="font-size:.85rem">${s.arrivalTime} ${data.clients[i]?.client?.name || '利用者'}</strong>
-                      <span class="tag">${data.clients[i]?.client?.visitDuration || 60}分</span>
+                      <strong style="font-size:.85rem">${s.arrivalTime} ${matchedClient?.client?.name || '利用者'}</strong>
+                      <span class="tag">${matchedClient?.client?.visitDuration || 60}分</span>
                     </div>
                   </div>`;
                 }).join('')}

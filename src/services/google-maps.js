@@ -274,6 +274,40 @@ export function getMap() {
 }
 
 /**
+ * 住所からlat/lng座標を取得（ジオコーディング）
+ * @param {string} address - 住所文字列
+ * @returns {Promise<{lat: number, lng: number}|null>} 座標オブジェクト、失敗時null
+ */
+export async function geocodeAddress(address) {
+  if (!address || address.trim() === '') return null;
+
+  // Google Maps APIが使えない場合はnullを返す
+  if (!window.google || !window.google.maps) {
+    console.warn('ジオコーディング: Google Maps APIが未読み込みです');
+    return null;
+  }
+
+  const geocoder = new google.maps.Geocoder();
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      geocoder.geocode({ address, region: 'jp' }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          const loc = results[0].geometry.location;
+          resolve({ lat: loc.lat(), lng: loc.lng() });
+        } else {
+          reject(new Error(`ジオコーディング失敗: ${status}`));
+        }
+      });
+    });
+    return result;
+  } catch (error) {
+    console.warn('住所の座標変換に失敗:', error.message);
+    return null;
+  }
+}
+
+/**
  * ダークモード用の地図スタイル
  */
 function getMapStyles() {

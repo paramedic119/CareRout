@@ -1,7 +1,7 @@
 // スケジュール管理画面
-import { getStaffList, getClientList, getVisitsByDate, addVisit, deleteVisit, getRoutesByDate } from '../services/firestore.js';
-import { SERVICE_TYPES, COST_PER_KM } from '../utils/constants.js';
-import { today, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
+import { getStaffList, getClientList, getVisitsByDate, getVisitList, addVisit, deleteVisit, getRoutesByDate } from '../services/firestore.js';
+import { SERVICE_TYPES, COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/constants.js';
+import { today, formatDate, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml, timeToMinutes, calculateVisitIncome } from '../utils/helpers.js';
 
 let selectedDate = today();
 
@@ -16,6 +16,10 @@ export async function renderSchedule() {
       </h1>
       <div class="btn-group">
         <input type="date" id="schedule-date" class="form-input" value="${selectedDate}" style="width:180px" />
+        <button class="btn btn-secondary" id="btn-generate-week">
+          <span class="material-icons-round">date_range</span>
+          今週の予定を自動生成
+        </button>
         <button class="btn btn-primary" id="btn-add-visit">
           <span class="material-icons-round">add</span>
           訪問追加
@@ -33,6 +37,7 @@ export async function renderSchedule() {
   });
 
   document.getElementById('btn-add-visit').addEventListener('click', openVisitForm);
+  document.getElementById('btn-generate-week').addEventListener('click', generateWeeklySchedule);
 
   await loadSchedule();
 }
@@ -131,18 +136,20 @@ async function loadSchedule() {
       const startTime = first.startTime || first.scheduledTime || '09:00';
       const endTime = last.startTime || last.scheduledTime || '17:00';
       
-      const [sh, sm] = startTime.split(':').map(Number);
-      const [eh, em] = endTime.split(':').map(Number);
-      const startMins = sh * 60 + sm;
-      const endMins = eh * 60 + em + (last.duration || 60);
+      const startMins = timeToMinutes(startTime);
+      const endMins = timeToMinutes(endTime) + (last.duration || 60);
       
       const workHours = (endMins - startMins) / 60;
       totalLaborCost += workHours * hourlyWage;
     }
 
     staffVisits.forEach((v, index) => {
-      // 売上のみ加算
-      totalRevenue += parseInt(v.income) || 3000;
+      // 売上の加算（incomeフィールド優先、なければ自動計算）
+      if (v.income) {
+        totalRevenue += parseInt(v.income);
+      } else {
+        totalRevenue += calculateVisitIncome(v.service || '身体介護', v.duration || 60);
+      }
 
       // 移動時間の特定（Google Mapsの実ルートデータ優先）
       let travelTime = 10;
@@ -225,7 +232,7 @@ async function loadSchedule() {
                 
                 if (index > 0) {
                    const prev = staffVisits[index - 1];
-                   const prevTimeStr = prev.startTime || prev.scheduledTime;
+                   const prevTimeStr = prev.optimizedArrivalTime || prev.startTime || prev.scheduledTime;
                    const travelTime = v.calculatedTravelTime || 10;
                    
                    if (prevTimeStr && timeStr !== '--:--') {
@@ -326,6 +333,13 @@ async function openVisitForm() {
           ${SERVICE_TYPES.map(s => `<option>${s}</option>`).join('')}
         </select>
       </div>
+      <div class="form-group">
+        <label class="form-label">想定売上（円）</label>
+        <input class="form-input" type="number" id="vf-income" value="3960" min="0" step="100" />
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:4px" id="vf-income-hint">
+          ↑ サービス種別と所要時間から自動計算されます
+        </div>
+      </div>
     </form>
   `;
 
@@ -334,6 +348,19 @@ async function openVisitForm() {
     <button class="btn btn-primary" id="vf-save">追加</button>
   `);
 
+  // サービス種別・所要時間変更時に売上を自動計算
+  const updateIncome = () => {
+    const service = document.getElementById('vf-service').value;
+    const duration = parseInt(document.getElementById('vf-duration').value) || 60;
+    const income = calculateVisitIncome(service, duration);
+    document.getElementById('vf-income').value = income;
+    document.getElementById('vf-income-hint').textContent =
+      `↑ ${service} ${duration}分 → ¥${income.toLocaleString()}（自動計算）`;
+  };
+  document.getElementById('vf-service').addEventListener('change', updateIncome);
+  document.getElementById('vf-duration').addEventListener('change', updateIncome);
+  updateIncome(); // 初期値をセット
+
   document.getElementById('vf-cancel').onclick = closeModal;
   document.getElementById('vf-save').onclick = async () => {
     const clientId = document.getElementById('vf-client').value;
@@ -341,13 +368,24 @@ async function openVisitForm() {
     if (!clientId || !staffId) { showToast('利用者と職員を選択してください', 'warning'); return; }
 
     try {
+      const duration = parseInt(document.getElementById('vf-duration').value) || 60;
+      const service = document.getElementById('vf-service').value;
+      const startTime = document.getElementById('vf-time').value;
+      const endMinutes = timeToMinutes(startTime) + duration;
+      const endH = Math.floor(endMinutes / 60);
+      const endM = endMinutes % 60;
+      const endTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
+
       await addVisit({
         date: selectedDate,
         clientId,
         staffId,
-        scheduledTime: document.getElementById('vf-time').value,
-        duration: parseInt(document.getElementById('vf-duration').value) || 60,
-        service: document.getElementById('vf-service').value,
+        startTime,
+        endTime,
+        scheduledTime: startTime,
+        duration,
+        service,
+        income: parseInt(document.getElementById('vf-income').value) || calculateVisitIncome(service, duration),
         status: 'scheduled',
       });
       showToast('訪問予定を追加しました', 'success');
@@ -357,6 +395,96 @@ async function openVisitForm() {
       showToast('追加に失敗しました', 'error');
     }
   };
+}
+
+/**
+ * 今週のスケジュールを利用者の曜日設定から一括生成
+ */
+async function generateWeeklySchedule() {
+  const ok = await confirmDialog(
+    '週間スケジュール自動生成',
+    '利用者の曜日設定に基づいて、今週（月〜土）の訪問予定を自動生成します。\n既存の予定がある日はスキップされます。\n\n実行しますか？'
+  );
+  if (!ok) return;
+
+  try {
+    const [clientList, allVisits] = await Promise.all([
+      getClientList(),
+      getVisitList(),
+    ]);
+
+    const dayMap = { '月': 1, '火': 2, '水': 3, '木': 4, '金': 5, '土': 6 };
+    const todayObj = new Date();
+    const currentDayOfWeek = todayObj.getDay(); // 0:日, 1:月...
+
+    // 利用者ごとの曜日別訪問予定を取得
+    const visitSchedules = allVisits.filter(v => v.dayOfWeek && dayMap[v.dayOfWeek] !== undefined);
+
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    for (const visit of visitSchedules) {
+      const targetDayNum = dayMap[visit.dayOfWeek];
+      if (targetDayNum === undefined) continue;
+
+      // 今週の該当曜日の日付を計算
+      const diff = targetDayNum - currentDayOfWeek;
+      const targetDate = new Date(todayObj);
+      targetDate.setDate(todayObj.getDate() + diff);
+      const dateStr = formatDate(targetDate);
+
+      // その日に同じ利用者の予定が既にあるかチェック
+      const existingVisits = await getVisitsByDate(dateStr);
+      const alreadyExists = existingVisits.some(ev => ev.clientId === visit.clientId);
+
+      if (alreadyExists) {
+        skippedCount++;
+        continue;
+      }
+
+      // 利用者情報から売上を自動計算
+      const client = clientList.find(c => c.id === visit.clientId);
+      const service = visit.service || (client?.requiredServices?.[0]) || '身体介護';
+      const duration = visit.duration || client?.visitDuration || 60;
+      const income = calculateVisitIncome(service, duration);
+
+      // 終了時刻を計算
+      const startTime = visit.startTime || '09:00';
+      const endMinutes = timeToMinutes(startTime) + duration;
+      const endH = Math.floor(endMinutes / 60);
+      const endM = endMinutes % 60;
+      const endTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
+
+      await addVisit({
+        date: dateStr,
+        clientId: visit.clientId,
+        clientName: visit.clientName || client?.name || '利用者',
+        staffId: visit.staffId || null,
+        staffName: visit.staffName || '未設定',
+        startTime,
+        endTime,
+        scheduledTime: startTime,
+        duration,
+        service,
+        income,
+        dayOfWeek: visit.dayOfWeek,
+        status: 'scheduled',
+      });
+      createdCount++;
+    }
+
+    if (createdCount > 0) {
+      showToast(`今週の訪問予定 ${createdCount}件 を自動生成しました！${skippedCount > 0 ? `（${skippedCount}件は既存のためスキップ）` : ''}`, 'success');
+    } else {
+      showToast(`生成する予定がありませんでした。${skippedCount > 0 ? `（${skippedCount}件は既に登録済み）` : '利用者の曜日設定を確認してください。'}`, 'warning');
+    }
+
+    await loadSchedule();
+
+  } catch (error) {
+    console.error('週間スケジュール生成エラー:', error);
+    showToast('スケジュール生成に失敗しました: ' + error.message, 'error');
+  }
 }
 
 // イベント委譲（削除ボタン）

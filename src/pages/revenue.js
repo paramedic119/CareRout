@@ -1,7 +1,7 @@
 // 収支シミュレーション（管理者用）
 import { getStaffList, getClientList, getVisitsByDate, getRoutesByDate } from '../services/firestore.js';
-import { today, formatDateJP, minutesToTime } from '../utils/helpers.js';
-import { COST_PER_KM } from '../utils/constants.js';
+import { today, formatDateJP, minutesToTime, timeToMinutes, calculateVisitIncome } from '../utils/helpers.js';
+import { COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/constants.js';
 
 let selectedDate = today();
 
@@ -93,12 +93,19 @@ async function loadAndDisplayRevenue() {
     let distance = 0;
     let workMinutes = 0;
 
-    // 収入計算
+    // 収入計算（incomeフィールドがあればそれを使用、なければサービス種別×時間から自動計算）
     staffVisits.forEach(v => {
-      revenue += (v.income || 0);
+      if (v.income) {
+        revenue += parseInt(v.income);
+      } else {
+        // サービス種別と所要時間から介護報酬を推定
+        revenue += calculateVisitIncome(v.service || '身体介護', v.duration || 60);
+      }
     });
 
     // 費用計算（ルートがある場合）
+    // 注意: 現在の設計では1日1ルート/職員を前提としている。
+    // 複数ルートが存在する場合は最後のルートの値で上書きされる。
     staffRoutes.forEach(r => {
       distance += (r.totalDistance || 0);
       vehicleCost += (r.totalDistance || 0) * COST_PER_KM;
@@ -111,6 +118,18 @@ async function loadAndDisplayRevenue() {
         laborCost = (workMinutes / 60) * (parseInt(staff.wage) || 2000);
       }
     });
+
+    // ルートがない場合のフォールバック（訪問時間から拘束時間を推定）
+    if (staffRoutes.length === 0 && staffVisits.length > 0) {
+      const sorted = [...staffVisits].sort((a, b) =>
+        (a.startTime || '09:00').localeCompare(b.startTime || '09:00'));
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const startMins = timeToMinutes(first.startTime || '09:00');
+      const endMins = timeToMinutes(last.startTime || '17:00') + (last.duration || 60);
+      workMinutes = endMins - startMins;
+      laborCost = (workMinutes / 60) * (parseInt(staff.wage) || 2000);
+    }
 
     return {
       ...staff,
@@ -144,7 +163,7 @@ async function loadAndDisplayRevenue() {
       <div class="card stat-card" style="border-top: 4px solid var(--warning)">
         <div class="stat-label">人件費推計</div>
         <div class="stat-value">¥${Math.round(totalLaborCost).toLocaleString()}</div>
-        <div style="font-size:.8rem;color:var(--text-muted);margin-top:4px">平均単価: ¥${staffStats.length > 0 ? Math.round(totalLaborCost / staffStats.length).toLocaleString() : 0}</div>
+        <div style="font-size:.8rem;color:var(--text-muted);margin-top:4px">平均人件費/人: ¥${staffStats.length > 0 ? Math.round(totalLaborCost / staffStats.length).toLocaleString() : 0}</div>
       </div>
       <div class="card stat-card" style="border-top: 4px solid var(--secondary)">
         <div class="stat-label">移動・車両費</div>
@@ -220,14 +239,14 @@ async function loadAndDisplayRevenue() {
               <span style="font-size:.9rem">売上に対する構成</span>
             </div>
             <div style="height:32px;display:flex;border-radius:16px;overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,0.1)">
-              <div style="width:${(totalLaborCost / totalRevenue * 100).toFixed(1)}%;background:var(--warning);display:flex;align-items:center;justify-content:center;color:#000;font-size:.7rem;font-weight:bold" title="人件費">人件費</div>
-              <div style="width:${(totalVehicleCost / totalRevenue * 100).toFixed(1)}%;background:var(--secondary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:bold" title="移動費">移動</div>
-              <div style="width:${Math.max(0, (totalProfit / totalRevenue * 100)).toFixed(1)}%;background:var(--success);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:bold" title="利益">利益</div>
+              <div style="width:${totalRevenue > 0 ? (totalLaborCost / totalRevenue * 100).toFixed(1) : 0}%;background:var(--warning);display:flex;align-items:center;justify-content:center;color:#000;font-size:.7rem;font-weight:bold" title="人件費">人件費</div>
+              <div style="width:${totalRevenue > 0 ? (totalVehicleCost / totalRevenue * 100).toFixed(1) : 0}%;background:var(--secondary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:bold" title="移動費">移動</div>
+              <div style="width:${totalRevenue > 0 ? Math.max(0, (totalProfit / totalRevenue * 100)).toFixed(1) : 0}%;background:var(--success);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:bold" title="利益">利益</div>
             </div>
             <div style="display:flex;gap:16px;margin-top:12px;font-size:.8rem">
-              <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;background:var(--warning)"></div> 人件費 (${(totalLaborCost / totalRevenue * 100).toFixed(1)}%)</div>
-              <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;background:var(--secondary)"></div> 移動費 (${(totalVehicleCost / totalRevenue * 100).toFixed(1)}%)</div>
-              <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;background:var(--success)"></div> 利益 (${Math.max(0, (totalProfit / totalRevenue * 100)).toFixed(1)}%)</div>
+              <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;background:var(--warning)"></div> 人件費 (${totalRevenue > 0 ? (totalLaborCost / totalRevenue * 100).toFixed(1) : 0}%)</div>
+              <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;background:var(--secondary)"></div> 移動費 (${totalRevenue > 0 ? (totalVehicleCost / totalRevenue * 100).toFixed(1) : 0}%)</div>
+              <div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;background:var(--success)"></div> 利益 (${totalRevenue > 0 ? Math.max(0, (totalProfit / totalRevenue * 100)).toFixed(1) : 0}%)</div>
             </div>
           </div>
 
@@ -235,7 +254,7 @@ async function loadAndDisplayRevenue() {
             <h4 style="margin-bottom:12px;font-size:.9rem;color:var(--text-secondary)">経営アドバイス</h4>
             <ul style="font-size:.85rem;line-height:1.6;padding-left:16px;color:var(--text-muted)">
               ${profitMargin < 15 ? '<li>利益率が15%を下回っています。移動ルートの最適化を再度実行し、移動時間を削減してください。</li>' : ''}
-              ${totalLaborCost / totalRevenue > 0.6 ? '<li>売上に対する人件費率が60%を超えています。1人あたりの訪問件数を増やす調整が必要です。</li>' : '<li>人件費率は適正範囲内です。</li>'}
+              ${totalRevenue > 0 && totalLaborCost / totalRevenue > 0.6 ? '<li>売上に対する人件費率が60%を超えています。1人あたりの訪問件数を増やす調整が必要です。</li>' : '<li>人件費率は適正範囲内です。</li>'}
               <li>現在の移動コスト単価は1kmあたり${COST_PER_KM}円で計算されています。</li>
             </ul>
           </div>

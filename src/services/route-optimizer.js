@@ -1,5 +1,5 @@
 // ルート最適化サービス — TSP近似解法
-import { haversineDistance } from '../utils/helpers.js';
+import { haversineDistance, timeToMinutes, minutesToTime } from '../utils/helpers.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
 
 /**
@@ -115,7 +115,7 @@ function nearestNeighborWithTimeWindows(points, distMatrix) {
   for (let i = 1; i < n; i++) {
     const p = points[i];
     if (p.timeWindow && p.timeWindow.start) {
-      withTimeWindow.push({ index: i, start: timeToMin(p.timeWindow.start), end: timeToMin(p.timeWindow.end) });
+      withTimeWindow.push({ index: i, start: timeToMinutes(p.timeWindow.start), end: timeToMinutes(p.timeWindow.end) });
     } else {
       flexible.push(i);
     }
@@ -213,7 +213,7 @@ function buildSchedule(route, distMatrix, staff, realMatrix = null, points = [])
   const schedule = [];
   // 平均車速: 都市部で約20km/h (Google Mapsが使えない場合のフォールバック)
   const avgSpeed = 20;
-  let currentTime = timeToMin(staff?.workStart || '08:30');
+  let currentTime = timeToMinutes(staff?.workStart || '08:30');
 
   for (let i = 0; i < route.length; i++) {
     let travelTime = 0;
@@ -238,10 +238,10 @@ function buildSchedule(route, distMatrix, staff, realMatrix = null, points = [])
       
       if (point.timeWindow && point.timeWindow.start) {
         // 利用者設定の時間枠があればそれを尊重
-        minStartMins = timeToMin(point.timeWindow.start);
+        minStartMins = timeToMinutes(point.timeWindow.start);
       } else if (point.scheduledStart) {
         // 時間枠がない場合は予約時間を基準にする
-        minStartMins = timeToMin(point.scheduledStart);
+        minStartMins = timeToMinutes(point.scheduledStart);
       }
 
       if (currentTime < minStartMins) {
@@ -253,7 +253,7 @@ function buildSchedule(route, distMatrix, staff, realMatrix = null, points = [])
     schedule.push({
       pointIndex: route[i],
       clientId: point ? point.id : null,
-      arrivalTime: minToTime(currentTime),
+      arrivalTime: minutesToTime(currentTime),
       arrivalMinutes: currentTime,
       travelTimeFromPrev: Math.ceil(travelTime),
     });
@@ -278,16 +278,3 @@ function calculateTotalDuration(schedule) {
   return end - start;
 }
 
-// --- ユーティリティ ---
-
-function timeToMin(t) {
-  if (!t) return 0;
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
-function minToTime(m) {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-}
