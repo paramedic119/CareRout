@@ -9,7 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/index-CqbcMius.js"></script>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#3b82f6" />
+  <script type="module" crossorigin src="./assets/index-sNtakvh8.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-CiMc-f1g.css">
 </head>
 <body>
@@ -39,7 +41,11 @@
           </div>
           <button id="btn-demo-mode" class="btn btn-secondary" style="width:100%;justify-content:center;padding:12px">
             <span class="material-icons-round">science</span>
-            デモモードで試す（ログイン不要）
+            管理者デモモードで試す
+          </button>
+          <button id="btn-staff-demo-mode" class="btn" style="width:100%;justify-content:center;padding:12px;margin-top:12px;background:var(--success);color:white;">
+            <span class="material-icons-round">directions_walk</span>
+            スタッフデモモードで試す
           </button>
           <p class="login-note">※ 管理者に登録されたアカウントのみアクセス可能です</p>
         </div>
@@ -67,27 +73,31 @@
           </button>
         </div>
         <ul class="sidebar-nav">
-          <li class="nav-item active" data-page="dashboard">
+          <li class="nav-item active" data-page="dashboard" id="nav-dashboard">
             <span class="material-icons-round">dashboard</span>
             <span class="nav-label">ダッシュボード</span>
           </li>
-          <li class="nav-item" data-page="map">
+          <li class="nav-item" data-page="my-schedule" id="nav-my-schedule" style="display:none">
+            <span class="material-icons-round">today</span>
+            <span class="nav-label">マイスケジュール</span>
+          </li>
+          <li class="nav-item" data-page="map" id="nav-map">
             <span class="material-icons-round">map</span>
             <span class="nav-label">マップビュー</span>
           </li>
-          <li class="nav-item" data-page="staff">
+          <li class="nav-item" data-page="staff" id="nav-staff">
             <span class="material-icons-round">badge</span>
             <span class="nav-label">職員管理</span>
           </li>
-          <li class="nav-item" data-page="client">
+          <li class="nav-item" data-page="client" id="nav-client">
             <span class="material-icons-round">elderly</span>
             <span class="nav-label">利用者管理</span>
           </li>
-          <li class="nav-item" data-page="schedule">
+          <li class="nav-item" data-page="schedule" id="nav-schedule">
             <span class="material-icons-round">calendar_month</span>
             <span class="nav-label">スケジュール</span>
           </li>
-          <li class="nav-item" data-page="matching">
+          <li class="nav-item" data-page="matching" id="nav-matching">
             <span class="material-icons-round">auto_fix_high</span>
             <span class="nav-label">マッチング＆最適化</span>
           </li>
@@ -134,5 +144,17 @@
     </div>
   </div>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then((registration) => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          }, (err) => {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
