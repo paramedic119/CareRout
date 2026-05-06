@@ -3,6 +3,34 @@ import { MATCHING_WEIGHTS } from '../utils/constants.js';
 import { haversineDistance, timeToMinutes, minutesToTime } from '../utils/helpers.js';
 
 /**
+ * 基準時間から前後30分の候補時間を生成する
+ * 優先順位: 元の時間 → +30分 → -30分
+ * @param {string} baseTime - 基準開始時間 (例: '09:00')
+ * @param {number} duration - 訪問所要時間（分）
+ * @returns {Array} 候補時間の配列
+ */
+function generateTimeOptions(baseTime, duration) {
+  const baseMinutes = timeToMinutes(baseTime);
+  const options = [
+    { startTime: baseTime, duration },
+  ];
+
+  // +30分の候補（18:00を超えない範囲）
+  const laterMinutes = baseMinutes + 30;
+  if (laterMinutes + duration <= 18 * 60) {
+    options.push({ startTime: minutesToTime(laterMinutes), duration });
+  }
+
+  // -30分の候補（07:00より前にならない範囲）
+  const earlierMinutes = baseMinutes - 30;
+  if (earlierMinutes >= 7 * 60) {
+    options.push({ startTime: minutesToTime(earlierMinutes), duration });
+  }
+
+  return options;
+}
+
+/**
  * 全職員×全利用者のマッチスコアを計算
  * @param {Array} staffList - 職員リスト
  * @param {Array} clientList - 利用者リスト（未割り当て分）
@@ -132,7 +160,9 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
   
   for (const visit of sortedVisits) {
     // 既にこの利用者が同じ日に割り当て済みの場合（重複データの防止）
+    // 修正B: 重複スキップした訪問もassignedVisitsに追加し、未割り当てリストに含めない
     if (assignments.some(a => a.clientId === visit.clientId)) {
+      assignedVisits.add(visit.id);
       continue;
     }
 
@@ -143,10 +173,12 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
         const client = clientList.find(c => c.id === visit.clientId);
         const { score, eligible: matchEligible } = evaluateMatch(staff, client || visit);
         
-        // 候補時間の試行（timeOptionsがあればそれらを試し、なければデフォルトの時間を試す）
+        // 修正A: 候補時間の試行（timeOptionsがなければ±30分の候補を自動生成）
+        const baseTime = visit.startTime || visit.scheduledTime || '09:00';
+        const baseDuration = visit.duration || 60;
         const options = (visit.timeOptions && visit.timeOptions.length > 0) 
           ? visit.timeOptions 
-          : [{ startTime: visit.startTime || visit.scheduledTime || '09:00', duration: visit.duration || 60 }];
+          : generateTimeOptions(baseTime, baseDuration);
 
         let bestTimeOption = null;
 
@@ -154,6 +186,14 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
           let timeEligible = true;
           const vStart = timeToMinutes(option.startTime);
           const vEnd = vStart + (option.duration || 60);
+
+          // 修正C: 職員の勤務時間帯チェック
+          const workStart = timeToMinutes(staff.workStart || '07:00');
+          const workEnd = timeToMinutes(staff.workEnd || '18:00');
+          if (vStart < workStart || vEnd > workEnd) {
+            timeEligible = false;
+            continue; // この時間候補はスキップして次の候補を試す
+          }
 
           const staffAssignments = assignments.filter(a => a.staffId === staff.id);
           
