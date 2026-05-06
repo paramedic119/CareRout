@@ -53,13 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // デモモードボタン
   document.getElementById('btn-demo-mode')?.addEventListener('click', async () => {
     const demoUser = {
-      displayName: 'デモユーザー',
-      email: 'demo@careroute.local',
+      displayName: '管理者（デモ）',
+      email: 'admin@careroute.local',
       photoURL: '',
     };
     showMainApp(demoUser);
     
-    // データがない場合は自動でデモデータを投入
     const existingStaff = await getStaffList();
     if (existingStaff.length === 0) {
       showToast('デモデータを自動投入しています...', 'info');
@@ -67,7 +66,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     await navigateTo('dashboard');
-    showToast('デモモードで起動しました', 'info');
+    showToast('管理者デモモードで起動しました', 'info');
+  });
+
+  // スタッフデモモードボタン
+  document.getElementById('btn-staff-demo-mode')?.addEventListener('click', async () => {
+    const demoUser = {
+      displayName: '現場スタッフ（デモ）',
+      email: 'staff@careroute.local',
+      photoURL: '',
+    };
+    showMainApp(demoUser);
+    
+    const existingStaff = await getStaffList();
+    if (existingStaff.length === 0) {
+      showToast('デモデータを自動投入しています...', 'info');
+      await loadDemoData(true);
+    }
+    
+    await navigateTo('my-schedule');
+    showToast('スタッフデモモードで起動しました', 'info');
   });
 });
 
@@ -93,14 +111,25 @@ function showMainApp(user) {
   if (avatar) avatar.src = user.photoURL || '';
   if (nameEl) nameEl.textContent = user.displayName || user.email;
 
-  // 今回のプロトタイプではデモユーザーを管理者とする
-  window.isAdmin = (user.email === 'demo@careroute.local');
+  // 今回のプロトタイプでは、メールアドレスで管理者を判定
+  window.isAdmin = (user.email === 'admin@careroute.local' || user.email === 'demo@careroute.local');
 
-  // 管理者メニューの表示切り替え
+  // メニューの表示切り替え
+  const displayAdmin = window.isAdmin ? 'flex' : 'none';
+  const displayStaff = window.isAdmin ? 'none' : 'flex';
+
+  document.getElementById('nav-dashboard').style.display = displayAdmin;
+  document.getElementById('nav-map').style.display = displayAdmin;
+  document.getElementById('nav-staff').style.display = displayAdmin;
+  document.getElementById('nav-client').style.display = displayAdmin;
+  document.getElementById('nav-schedule').style.display = displayAdmin;
+  document.getElementById('nav-matching').style.display = displayAdmin;
   const revenueNav = document.getElementById('nav-revenue');
-  if (revenueNav) {
-    revenueNav.style.display = window.isAdmin ? 'flex' : 'none';
-  }
+  if (revenueNav) revenueNav.style.display = displayAdmin;
+
+  // スタッフ用メニュー
+  const myScheduleNav = document.getElementById('nav-my-schedule');
+  if (myScheduleNav) myScheduleNav.style.display = displayStaff;
 
   // デモデータ投入ボタン（初回のみ）
   addDemoDataButton();

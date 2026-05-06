@@ -15,7 +15,19 @@ export async function renderDashboard() {
   const visits = await getVisitsByDate(todayStr).catch(() => []);
   const activeStaff = staffList.filter(s => s.isActive);
   const activeClients = clientList.filter(c => c.isActive);
-  const scheduledVisits = visits.filter(v => v.status !== 'cancelled');
+  
+  const allVisits = visits.filter(v => v.type !== 'sales');
+  const scheduledVisits = allVisits.filter(v => v.status === 'scheduled' || !v.status);
+  const completedVisits = allVisits.filter(v => v.status === 'completed');
+  const cancelledVisits = allVisits.filter(v => v.status === 'cancelled');
+  const salesVisits = visits.filter(v => v.type === 'sales');
+
+  // キャンセル理由の集計
+  const cancelReasonsCount = {};
+  cancelledVisits.forEach(v => {
+    const reason = v.cancelReason || '理由なし';
+    cancelReasonsCount[reason] = (cancelReasonsCount[reason] || 0) + 1;
+  });
 
   container.innerHTML = `
     <div class="page-header">
@@ -33,48 +45,95 @@ export async function renderDashboard() {
         <div class="stat-label">稼働職員</div>
         <div class="stat-value">${activeStaff.length}<span style="font-size:.9rem;color:var(--text-muted)">名</span></div>
       </div>
-      <div class="card stat-card success">
-        <span class="material-icons-round stat-icon">elderly</span>
-        <div class="stat-label">登録利用者</div>
-        <div class="stat-value">${activeClients.length}<span style="font-size:.9rem;color:var(--text-muted)">名</span></div>
-      </div>
       <div class="card stat-card">
         <span class="material-icons-round stat-icon">event</span>
-        <div class="stat-label">本日の訪問</div>
-        <div class="stat-value">${scheduledVisits.length}<span style="font-size:.9rem;color:var(--text-muted)">件</span></div>
+        <div class="stat-label">本日の訪問 (完了/全体)</div>
+        <div class="stat-value">${completedVisits.length}<span style="font-size:.9rem;color:var(--text-muted)"> / ${allVisits.length}件</span></div>
+      </div>
+      <div class="card stat-card danger">
+        <span class="material-icons-round stat-icon">cancel</span>
+        <div class="stat-label">本日のキャンセル</div>
+        <div class="stat-value">${cancelledVisits.length}<span style="font-size:.9rem;color:var(--text-muted)">件</span></div>
       </div>
       <div class="card stat-card warning">
-        <span class="material-icons-round stat-icon">warning</span>
-        <div class="stat-label">未割り当て</div>
-        <div class="stat-value">${Math.max(0, activeClients.length - scheduledVisits.length)}<span style="font-size:.9rem;color:var(--text-muted)">件</span></div>
+        <span class="material-icons-round stat-icon">storefront</span>
+        <div class="stat-label">スキマ営業（自律行動）</div>
+        <div class="stat-value">${salesVisits.length}<span style="font-size:.9rem;color:var(--text-muted)">件</span></div>
       </div>
     </div>
 
     <!-- 下部セクション -->
     <div class="grid grid-2">
-      <!-- 職員一覧 -->
-      <div class="card">
+      <!-- 職員の稼働状況 -->
+      <div class="card" style="grid-column: 1 / -1;">
         <div class="card-header">
           <h3 class="card-title">
             <span class="material-icons-round" style="color:var(--primary)">people</span>
-            職員一覧
+            本日のスタッフ稼働状況
           </h3>
         </div>
         <div>
           ${activeStaff.length === 0
             ? '<p style="color:var(--text-muted);text-align:center;padding:20px">職員が登録されていません</p>'
-            : activeStaff.map(s => `
-              <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-                <div style="width:12px;height:12px;border-radius:50%;background:${s.color || '#999'};flex-shrink:0"></div>
-                <div style="flex:1">
-                  <div style="font-weight:500">${s.name}</div>
-                  <div style="font-size:.8rem;color:var(--text-muted)">${(s.skills?.qualifications || []).join(', ') || '資格なし'}</div>
-                </div>
-                <div class="tags-container">
-                  ${(s.skills?.services || []).slice(0, 2).map(sv => `<span class="tag">${sv}</span>`).join('')}
-                </div>
-              </div>
-            `).join('')
+            : activeStaff.map(s => {
+                const sVisits = allVisits.filter(v => v.staffId === s.id);
+                const sComp = sVisits.filter(v => v.status === 'completed').length;
+                const sCanc = sVisits.filter(v => v.status === 'cancelled').length;
+                const sSales = salesVisits.filter(v => v.staffId === s.id).length;
+                
+                return `
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+                    <div style="width:12px;height:12px;border-radius:50%;background:${s.color || '#999'};flex-shrink:0"></div>
+                    <div style="flex:1">
+                      <div style="font-weight:600">${s.name}</div>
+                      <div style="font-size:.8rem;color:var(--text-muted)">訪問: ${sVisits.length}件</div>
+                    </div>
+                    <div style="display:flex; gap:16px;">
+                      <div style="text-align:center;">
+                        <div style="font-size:0.7rem; color:var(--text-muted);">完了</div>
+                        <div style="font-weight:bold; color:var(--success);">${sComp}</div>
+                      </div>
+                      <div style="text-align:center;">
+                        <div style="font-size:0.7rem; color:var(--text-muted);">キャンセル</div>
+                        <div style="font-weight:bold; color:${sCanc > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${sCanc}</div>
+                      </div>
+                      <div style="text-align:center;">
+                        <div style="font-size:0.7rem; color:var(--text-muted);">営業</div>
+                        <div style="font-weight:bold; color:${sSales > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${sSales}</div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')
+          }
+        </div>
+      </div>
+      
+      <!-- キャンセル分析 -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <span class="material-icons-round" style="color:var(--danger)">analytics</span>
+            本日のキャンセル分析
+          </h3>
+        </div>
+        <div style="padding-top:8px;">
+          ${cancelledVisits.length === 0 
+            ? '<p style="color:var(--text-muted); text-align:center; padding:20px;">本日のキャンセルはありません</p>'
+            : Object.entries(cancelReasonsCount).map(([reason, count]) => {
+                const percent = Math.round((count / cancelledVisits.length) * 100);
+                return `
+                  <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;">
+                      <span>${reason}</span>
+                      <span style="font-weight:bold;">${count}件 (${percent}%)</span>
+                    </div>
+                    <div style="width:100%; height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+                      <div style="width:${percent}%; height:100%; background:var(--danger);"></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')
           }
         </div>
       </div>
@@ -96,13 +155,9 @@ export async function renderDashboard() {
             <span class="material-icons-round">map</span>
             マップビューを開く
           </button>
-          <button class="btn btn-secondary" onclick="document.querySelector('[data-page=staff]').click()" style="width:100%;justify-content:center">
-            <span class="material-icons-round">person_add</span>
-            職員を管理する
-          </button>
-          <button class="btn btn-secondary" onclick="document.querySelector('[data-page=client]').click()" style="width:100%;justify-content:center">
-            <span class="material-icons-round">group_add</span>
-            利用者を管理する
+          <button class="btn btn-secondary" onclick="document.querySelector('[data-page=revenue]').click()" style="width:100%;justify-content:center">
+            <span class="material-icons-round">analytics</span>
+            収支シミュレーションを開く
           </button>
         </div>
       </div>

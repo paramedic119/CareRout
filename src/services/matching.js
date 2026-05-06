@@ -1,6 +1,6 @@
 // マッチングエンジン — 職員と利用者のスキルベース自動割り当て
 import { MATCHING_WEIGHTS } from '../utils/constants.js';
-import { haversineDistance, timeToMinutes } from '../utils/helpers.js';
+import { haversineDistance, timeToMinutes, minutesToTime } from '../utils/helpers.js';
 
 /**
  * 全職員×全利用者のマッチスコアを計算
@@ -131,6 +131,11 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
   });
   
   for (const visit of sortedVisits) {
+    // 既にこの利用者が同じ日に割り当て済みの場合（重複データの防止）
+    if (assignments.some(a => a.clientId === visit.clientId)) {
+      continue;
+    }
+
     const candidates = staffList
       .filter(s => s.isActive)
       .map(staff => {
@@ -138,19 +143,24 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
         const client = clientList.find(c => c.id === visit.clientId);
         const { score, eligible: matchEligible } = evaluateMatch(staff, client || visit);
         
-        let timeEligible = true;
-        const staffAssignments = assignments.filter(a => a.staffId === staff.id);
-        
-        if (staffAssignments.length > 0) {
-          const vTimeStr = visit.startTime || visit.scheduledTime || '00:00';
-          const vStart = timeToMinutes(vTimeStr);
-          const vEnd = vStart + (visit.duration || 60);
+        // 候補時間の試行（timeOptionsがあればそれらを試し、なければデフォルトの時間を試す）
+        const options = (visit.timeOptions && visit.timeOptions.length > 0) 
+          ? visit.timeOptions 
+          : [{ startTime: visit.startTime || visit.scheduledTime || '09:00', duration: visit.duration || 60 }];
 
-          for (const existing of staffAssignments) {
-            const eTimeStr = existing.startTime || existing.scheduledTime || '00:00';
-            const eStart = timeToMinutes(eTimeStr);
-            const eEnd = eStart + (existing.duration || 60);
-            
+        let bestTimeOption = null;
+
+        for (const option of options) {
+          let timeEligible = true;
+          const vStart = timeToMinutes(option.startTime);
+          const vEnd = vStart + (option.duration || 60);
+
+          const staffAssignments = assignments.filter(a => a.staffId === staff.id);
+          
+          for (const assigned of staffAssignments) {
+            const eStart = timeToMinutes(assigned.startTime);
+            const eEnd = eStart + (assigned.duration || 60);
+
             // 1. 時間の重なりチェック
             if (vStart < eEnd && vEnd > eStart) {
               timeEligible = false;
@@ -158,16 +168,14 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
             }
 
             // 2. 実走行時間に基づく移動時間の確保チェック（方向別）
-            const travelTime = getMoveTime(existing.clientId, visit.clientId);
+            const travelTime = getMoveTime(assigned.clientId, visit.clientId);
             
-            // 新しい訪問が既存の「後」に来る場合
             if (vStart >= eEnd) {
               if ((vStart - eEnd) < travelTime) {
                 timeEligible = false;
                 break;
               }
             }
-            // 新しい訪問が既存の「前」に来る場合
             else if (vEnd <= eStart) {
               if ((eStart - vEnd) < travelTime) {
                 timeEligible = false;
@@ -175,9 +183,19 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
               }
             }
           }
+
+          if (timeEligible) {
+            bestTimeOption = option;
+            break; // 最初に見つかった空き時間を採用
+          }
         }
 
-        return { staff, score, eligible: matchEligible && timeEligible };
+        return { 
+          staff, 
+          score, 
+          eligible: matchEligible && !!bestTimeOption,
+          chosenTime: bestTimeOption
+        };
       })
       .filter(c => c.eligible);
 
@@ -213,6 +231,10 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
     const limit = bestMatch.staff.maxVisits || (bestMatch.staff.type === 'パート' ? 5 : 10);
 
     if (currentCount < limit) {
+      const chosenStart = bestMatch.chosenTime.startTime;
+      const duration = bestMatch.chosenTime.duration || 60;
+      const endMinutes = timeToMinutes(chosenStart) + duration;
+
       assignments.push({
         staffId: bestMatch.staff.id,
         staffName: bestMatch.staff.name,
@@ -220,10 +242,10 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
         clientId: visit.clientId,
         clientName: visit.clientName || '利用者',
         score: bestMatch.score,
-        startTime: visit.startTime,
-        endTime: visit.endTime,
-        scheduledTime: visit.scheduledTime,
-        duration: visit.duration || 60,
+        startTime: chosenStart,
+        endTime: minutesToTime(endMinutes),
+        scheduledTime: chosenStart,
+        duration: duration,
       });
 
       assignedVisits.add(visit.id);

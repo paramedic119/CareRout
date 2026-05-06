@@ -6,6 +6,7 @@ import { renderClientManage } from './pages/client-manage.js';
 import { renderSchedule } from './pages/schedule.js';
 import { renderMatching } from './pages/matching.js';
 import { renderRevenue } from './pages/revenue.js';
+import { renderMySchedule } from './pages/my-schedule.js';
 
 // ページ定義
 const pages = {
@@ -16,6 +17,7 @@ const pages = {
   schedule: { render: renderSchedule, title: 'スケジュール' },
   matching: { render: renderMatching, title: 'マッチング＆最適化' },
   revenue: { render: renderRevenue, title: '収支シミュレーション' },
+  'my-schedule': { render: renderMySchedule, title: 'マイスケジュール' },
 };
 
 let currentPage = 'dashboard';
@@ -71,6 +73,12 @@ export async function navigateTo(pageName) {
   if (!page) return;
 
   currentPage = pageName;
+
+  // 権限チェック（スタッフは 'my-schedule' 以外にアクセスできないように制限）
+  if (window.isAdmin === false && pageName !== 'my-schedule') {
+    console.warn('アクセス権限がありません:', pageName);
+    return;
+  }
 
   // ナビゲーションのアクティブ状態を更新
   document.querySelectorAll('.nav-item').forEach(item => {

@@ -144,6 +144,31 @@ export function confirmDialog(title, message) {
 }
 
 /**
+ * 担当職員の属性と所要時間から実際の収益（売上）を計算するカスタムロジック
+ * @param {Object} staff - 担当職員オブジェクト
+ * @param {number} duration - 所要時間（分）
+ * @returns {number} 収益額（円）
+ */
+export function calculateCustomRevenue(staff, duration) {
+  if (!staff) return 0;
+
+  let hourlyWage = 1500; // デフォルト時給
+
+  if (staff.type === '正社員') {
+    if (staff.name.includes('前川')) {
+      hourlyWage = 2500;
+    } else {
+      hourlyWage = 1500;
+    }
+  } else if (staff.type === 'パート') {
+    hourlyWage = parseInt(staff.wage) || 1500; // パートごとの設定時給
+  }
+
+  // 所要時間（分）に応じた収益を計算（例: 時給1500円で60分なら1500円、30分なら750円）
+  return Math.round(hourlyWage * (duration / 60));
+}
+
+/**
  * サービス種別と所要時間（分）から介護報酬額を計算
  * @param {string} serviceType - サービス種別（'身体介護' 等）
  * @param {number} duration - 所要時間（分）

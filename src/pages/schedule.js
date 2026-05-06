@@ -1,7 +1,7 @@
 // スケジュール管理画面
 import { getStaffList, getClientList, getVisitsByDate, getVisitList, addVisit, deleteVisit, getRoutesByDate } from '../services/firestore.js';
 import { SERVICE_TYPES, COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/constants.js';
-import { today, formatDate, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml, timeToMinutes, calculateVisitIncome } from '../utils/helpers.js';
+import { today, formatDate, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml, timeToMinutes, calculateVisitIncome, calculateCustomRevenue } from '../utils/helpers.js';
 
 let selectedDate = today();
 
@@ -77,6 +77,13 @@ async function loadSchedule() {
     }
   }
 
+  // 未割り当て訪問を時間順にソート
+  unassignedVisits.sort((a, b) => {
+    const timeA = a.startTime || a.scheduledTime || '00:00';
+    const timeB = b.startTime || b.scheduledTime || '00:00';
+    return timeA.localeCompare(timeB);
+  });
+
   // 未割り当ての訪問UI
   let unassignedHtml = '';
   if (unassignedVisits.length > 0) {
@@ -93,7 +100,7 @@ async function loadSchedule() {
               <div class="visit-card" style="border: 1px dashed var(--danger);">
                 <div style="display:flex;justify-content:space-between;align-items:start">
                   <div>
-                    <strong>${escapeHtml(client?.name || '不明')}</strong>
+                    <strong>${escapeHtml(v.clientName || client?.name || '不明')} ${v.type === 'sales' ? '<span class="tag" style="background:var(--warning);color:white;margin-left:4px">営業</span>' : ''}</strong>
                     <div style="font-size:.8rem;color:var(--text-muted)">${v.startTime} | ${v.duration || 60}分</div>
                   </div>
                   <button class="btn-icon" data-delete-visit="${v.id}" style="color:var(--danger)">
@@ -120,8 +127,12 @@ async function loadSchedule() {
       totalVehicleCost += (staffRoute.totalDistance || 0) * COST_PER_KM;
     }
 
-    // 訪問を時間順にソート
-    staffVisits.sort((a, b) => (a.startTime || a.scheduledTime || '').localeCompare(b.startTime || b.scheduledTime || ''));
+    // 訪問を実際に表示される時間順にソート（最適化後の時間を優先）
+    staffVisits.sort((a, b) => {
+      const timeA = a.optimizedArrivalTime || a.startTime || a.scheduledTime || '00:00';
+      const timeB = b.optimizedArrivalTime || b.startTime || b.scheduledTime || '00:00';
+      return timeA.localeCompare(timeB);
+    });
 
     // 人件費の計算（拘束時間ベース：事業所出発〜事業所帰還まで）
     if (staffRoute && staffRoute.schedule && staffRoute.schedule.length >= 2) {
@@ -144,12 +155,9 @@ async function loadSchedule() {
     }
 
     staffVisits.forEach((v, index) => {
-      // 売上の加算（incomeフィールド優先、なければ自動計算）
-      if (v.income) {
-        totalRevenue += parseInt(v.income);
-      } else {
-        totalRevenue += calculateVisitIncome(v.service || '身体介護', v.duration || 60);
-      }
+      // 売上の加算（スタッフ情報からカスタム計算）
+      // ※ 手動設定のincome値があっても、スタッフごとのルール（前川2500円など）を優先して再計算
+      totalRevenue += calculateCustomRevenue(staff, v.duration || 60);
 
       // 移動時間の特定（Google Mapsの実ルートデータ優先）
       let travelTime = 10;
@@ -163,6 +171,13 @@ async function loadSchedule() {
       }
       v.calculatedTravelTime = travelTime;
       v.optimizedArrivalTime = arrivalTime;
+    });
+
+    // プロパティ付与後にもう一度ソート（arrivalTimeが確定したため）
+    staffVisits.sort((a, b) => {
+      const timeA = a.optimizedArrivalTime || a.startTime || a.scheduledTime || '00:00';
+      const timeB = b.optimizedArrivalTime || b.startTime || b.scheduledTime || '00:00';
+      return timeA.localeCompare(timeB);
     });
   }
 
@@ -269,13 +284,13 @@ async function loadSchedule() {
                       <div class="visit-card">
                         <div style="display:flex;justify-content:space-between;align-items:start">
                           <div>
-                            <strong>${escapeHtml(client?.name || '不明')}</strong>
+                            <strong>${escapeHtml(v.clientName || client?.name || '不明')} ${v.type === 'sales' ? '<span class="tag" style="background:var(--warning);color:white;margin-left:4px">営業</span>' : ''}</strong>
                             <div style="font-size:.8rem;color:var(--text-muted)">
-                              ${v.serviceInfo || v.service || '訪問'} | ${v.duration || 60}分
+                              ${v.type === 'sales' ? '営業活動' : (v.serviceInfo || v.service || '訪問')} | ${v.duration || 60}分
                             </div>
                             <div style="font-size:.75rem;color:var(--text-muted); margin-top:2px;">
                               <span class="material-icons-round" style="font-size:12px;vertical-align:middle">place</span>
-                              ${escapeHtml(client?.area || '未設定')}
+                              ${escapeHtml(v.type === 'sales' ? (v.salesTarget || '営業先') : (client?.area || '未設定'))}
                             </div>
                           </div>
                           <button class="btn-icon" data-delete-visit="${v.id}" style="color:var(--danger)" title="削除">
@@ -422,6 +437,9 @@ async function generateWeeklySchedule() {
 
     let createdCount = 0;
     let skippedCount = 0;
+    // 今回の実行で既に追加（またはスキップ対象と判断）した「日付-利用者」を記録
+    // 値として、その訪問データのインデックスまたは候補リストを保持するように変更
+    const dailyVisitMap = new Map();
 
     for (const visit of visitSchedules) {
       const targetDayNum = dayMap[visit.dayOfWeek];
@@ -433,42 +451,69 @@ async function generateWeeklySchedule() {
       targetDate.setDate(todayObj.getDate() + diff);
       const dateStr = formatDate(targetDate);
 
-      // その日に同じ利用者の予定が既にあるかチェック
-      const existingVisits = await getVisitsByDate(dateStr);
-      const alreadyExists = existingVisits.some(ev => ev.clientId === visit.clientId);
+      // 重複チェック用のキー
+      const processKey = `${dateStr}_${visit.clientId}`;
+      
+      // 既にこの日のこの利用者のベース枠がある場合、候補時間(timeOptions)として追加
+      if (dailyVisitMap.has(processKey)) {
+        const existingData = dailyVisitMap.get(processKey);
+        existingData.timeOptions.push({
+          startTime: visit.startTime || '09:00',
+          duration: visit.duration || 60
+        });
+        continue;
+      }
 
-      if (alreadyExists) {
+      // DBチェック（既存の予定がある場合はMapに空（スキップ対象）として記録）
+      const existingVisits = await getVisitsByDate(dateStr);
+      if (existingVisits.some(ev => ev.clientId === visit.clientId)) {
+        dailyVisitMap.set(processKey, null); // スキップ対象
         skippedCount++;
         continue;
       }
 
-      // 利用者情報から売上を自動計算
-      const client = clientList.find(c => c.id === visit.clientId);
-      const service = visit.service || (client?.requiredServices?.[0]) || '身体介護';
-      const duration = visit.duration || client?.visitDuration || 60;
+      // 新規枠としてMapに登録
+      dailyVisitMap.set(processKey, {
+        ...visit,
+        date: dateStr,
+        timeOptions: [{
+          startTime: visit.startTime || '09:00',
+          duration: visit.duration || 60
+        }]
+      });
+    }
+
+    // 集約されたデータをDBに登録
+    for (const [key, data] of dailyVisitMap) {
+      if (!data) continue;
+
+      const client = clientList.find(c => c.id === data.clientId);
+      const service = data.service || (client?.requiredServices?.[0]) || '身体介護';
+      const duration = data.duration || client?.visitDuration || 60;
+      const startTime = data.startTime || '09:00';
       const income = calculateVisitIncome(service, duration);
 
       // 終了時刻を計算
-      const startTime = visit.startTime || '09:00';
       const endMinutes = timeToMinutes(startTime) + duration;
       const endH = Math.floor(endMinutes / 60);
       const endM = endMinutes % 60;
       const endTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
 
       await addVisit({
-        date: dateStr,
-        clientId: visit.clientId,
-        clientName: visit.clientName || client?.name || '利用者',
-        staffId: visit.staffId || null,
-        staffName: visit.staffName || '未設定',
+        date: data.date,
+        clientId: data.clientId,
+        clientName: data.clientName || client?.name || '利用者',
+        staffId: data.staffId || null,
+        staffName: data.staffName || '未設定',
         startTime,
         endTime,
         scheduledTime: startTime,
         duration,
         service,
         income,
-        dayOfWeek: visit.dayOfWeek,
+        dayOfWeek: data.dayOfWeek,
         status: 'scheduled',
+        timeOptions: data.timeOptions // 複数候補を保持
       });
       createdCount++;
     }

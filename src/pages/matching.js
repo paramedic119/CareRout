@@ -1,5 +1,5 @@
 // マッチング＆最適化画面
-import { getStaffList, getClientList, saveRoutes, getVisitsByDate, updateVisit } from '../services/firestore.js';
+import { getStaffList, getClientList, saveRoutes, getVisitsByDate, updateVisit, deleteVisit } from '../services/firestore.js';
 import { autoAssign, getScoreLevel } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
 import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
@@ -291,19 +291,37 @@ async function saveOptimizedRoutes(staffList, routes) {
 
     // 全訪問予定を取得して担当者を更新
     const allVisits = await getVisitsByDate(selectedDate);
+    const assignedClientIds = new Set();
+    
+    // 1. マッチングした訪問を更新
     for (const v of allVisits) {
       const assignment = lastAssignments.find(a => a.visitId === v.id);
       if (assignment) {
         await updateVisit(v.id, { 
           staffId: assignment.staffId,
-          staffName: assignment.staffName
+          staffName: assignment.staffName,
+          startTime: assignment.startTime,
+          endTime: assignment.endTime,
+          scheduledTime: assignment.scheduledTime
         });
-      } else {
-        // マッチング結果に含まれない場合は「未割り当て」にリセット
-        await updateVisit(v.id, { 
-          staffId: null,
-          staffName: '未設定'
-        });
+        assignedClientIds.add(v.clientId);
+      }
+    }
+
+    // 2. マッチングされなかった訪問の処理（重複削除と未割り当てリセット）
+    for (const v of allVisits) {
+      const assignment = lastAssignments.find(a => a.visitId === v.id);
+      if (!assignment) {
+        if (assignedClientIds.has(v.clientId)) {
+          // 同じ利用者の別の訪問予定が既に割り当て済みの場合は、この重複データを削除
+          await deleteVisit(v.id);
+        } else {
+          // マッチング結果に含まれない場合は「未割り当て」にリセット
+          await updateVisit(v.id, { 
+            staffId: null,
+            staffName: '未設定'
+          });
+        }
       }
     }
 

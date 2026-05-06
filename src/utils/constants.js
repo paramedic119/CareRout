@@ -43,6 +43,23 @@ export const VISIT_STATUS = {
   cancelled: { label: 'キャンセル', color: 'var(--danger)' },
 };
 
+// キャンセル理由
+export const CANCEL_REASONS = [
+  '利用者の体調不良',
+  '利用者の入院',
+  '家族の都合',
+  '不在・応答なし',
+  'その他',
+];
+
+// 営業先カテゴリ（ケアマネ等）
+export const SALES_TARGETS = [
+  '居宅介護支援事業所（ケアマネ）',
+  '地域包括支援センター',
+  '医療機関（退院調整室）',
+  'その他',
+];
+
 // 時間枠の選択肢
 export const TIME_SLOTS = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',

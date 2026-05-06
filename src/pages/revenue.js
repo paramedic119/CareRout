@@ -1,6 +1,6 @@
 // 収支シミュレーション（管理者用）
 import { getStaffList, getClientList, getVisitsByDate, getRoutesByDate } from '../services/firestore.js';
-import { today, formatDateJP, minutesToTime, timeToMinutes, calculateVisitIncome } from '../utils/helpers.js';
+import { today, formatDateJP, minutesToTime, timeToMinutes, calculateVisitIncome, calculateCustomRevenue } from '../utils/helpers.js';
 import { COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/constants.js';
 
 let selectedDate = today();
@@ -93,14 +93,10 @@ async function loadAndDisplayRevenue() {
     let distance = 0;
     let workMinutes = 0;
 
-    // 収入計算（incomeフィールドがあればそれを使用、なければサービス種別×時間から自動計算）
+    // 収入計算（スタッフ情報からカスタム計算）
     staffVisits.forEach(v => {
-      if (v.income) {
-        revenue += parseInt(v.income);
-      } else {
-        // サービス種別と所要時間から介護報酬を推定
-        revenue += calculateVisitIncome(v.service || '身体介護', v.duration || 60);
-      }
+      // 訪問データに担当職員の時給情報等を適用して収益計算
+      revenue += calculateCustomRevenue(staff, v.duration || 60);
     });
 
     // 費用計算（ルートがある場合）
