@@ -4,11 +4,15 @@ import { autoAssign, getScoreLevel } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
 import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
-import { showToast, today, formatDateJP, escapeHtml } from '../utils/helpers.js';
+import { showToast, today, formatDateJP, escapeHtml, showModal, closeModal, timeToMinutes, minutesToTime } from '../utils/helpers.js';
 
 let lastAssignments = null;
 let lastRoutes = null;
 let selectedDate = today();
+let lastActiveStaff = null;
+let lastStaffList = null;
+let lastClientList = null;
+let lastUnassigned = null;
 
 export async function renderMatching() {
   const container = document.getElementById('page-container');
@@ -137,6 +141,10 @@ async function runOptimization() {
       allPoints
     );
     lastAssignments = assignments;
+    lastUnassigned = unassigned;
+    lastActiveStaff = activeStaff;
+    lastStaffList = staffList;
+    lastClientList = clientList;
 
     // Step 2: ルート最適化
     const routes = await optimizeRoutes(
@@ -158,11 +166,7 @@ async function runOptimization() {
 
     // 結果表示
     resultsDiv.innerHTML = renderResults(staffList, clientList, assignments, unassigned, routes);
-
-    // 保存ボタンのイベント
-    document.getElementById('btn-save-routes')?.addEventListener('click', async () => {
-      await saveOptimizedRoutes(staffList, routes);
-    });
+    attachResultEvents();
 
     showToast('最適化が完了しました！', 'success');
 
@@ -255,8 +259,13 @@ function renderResults(staffList, clientList, assignments, unassigned, routes) {
           未割り当ての利用者
         </h3>
         ${unassigned.map(u => `
-          <div style="padding:6px 0;color:var(--text-secondary)">
-            ${escapeHtml(u.clientName)} — ${u.reason}
+          <div style="padding:8px 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center">
+            <div style="color:var(--text-secondary)">
+              <strong>${escapeHtml(u.clientName)}</strong> — ${escapeHtml(u.reason)}
+            </div>
+            <button class="btn btn-secondary btn-manual-assign" style="padding:6px 12px;font-size:0.85rem;" data-visit-id="${u.visitId}">
+              手動割当
+            </button>
           </div>
         `).join('')}
       </div>
@@ -331,3 +340,122 @@ async function saveOptimizedRoutes(staffList, routes) {
     showToast('保存に失敗しました: ' + e.message, 'error');
   }
 }
+
+// === イベントと手動割当関連 ===
+
+function attachResultEvents() {
+  document.getElementById('btn-save-routes')?.addEventListener('click', async () => {
+    await saveOptimizedRoutes(lastStaffList, lastRoutes);
+  });
+
+  document.querySelectorAll('.btn-manual-assign').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const visitId = e.target.closest('.btn-manual-assign').dataset.visitId;
+      openManualAssignModal(visitId);
+    });
+  });
+}
+
+function openManualAssignModal(visitId) {
+  const unassignedItem = lastUnassigned.find(u => u.visitId === visitId);
+  if (!unassignedItem) return;
+  const visit = unassignedItem.visit;
+
+  const staffOptions = lastActiveStaff.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+
+  const bodyHtml = `
+    <div style="margin-bottom: 16px;">
+      <div style="font-weight:600;margin-bottom:4px">利用者: ${escapeHtml(unassignedItem.clientName)}</div>
+      <div style="font-size:0.85rem;color:var(--text-secondary)">
+        所要時間: ${visit.duration || 60}分<br>
+        希望/予定時間: ${visit.startTime || visit.scheduledTime || '未定'}
+      </div>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label class="form-label">担当職員</label>
+      <select id="manual-staff-select" class="form-input">
+        ${staffOptions}
+      </select>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label class="form-label">開始時間</label>
+      <input type="time" id="manual-time-input" class="form-input" value="${visit.startTime || visit.scheduledTime || '09:00'}">
+    </div>
+  `;
+
+  const footerHtml = `
+    <button class="btn btn-secondary" id="manual-cancel">キャンセル</button>
+    <button class="btn btn-primary" id="manual-ok">割り当て</button>
+  `;
+
+  showModal('手動割り当て', bodyHtml, footerHtml);
+
+  document.getElementById('manual-cancel').onclick = () => { closeModal(); };
+  document.getElementById('manual-ok').onclick = async () => {
+    const staffId = document.getElementById('manual-staff-select').value;
+    const startTime = document.getElementById('manual-time-input').value;
+    closeModal();
+    await applyManualAssignment(visitId, staffId, startTime);
+  };
+}
+
+async function applyManualAssignment(visitId, staffId, startTime) {
+  const unassignedIdx = lastUnassigned.findIndex(u => u.visitId === visitId);
+  if (unassignedIdx === -1) return;
+
+  const unassignedItem = lastUnassigned[unassignedIdx];
+  const visit = unassignedItem.visit;
+  const staff = lastActiveStaff.find(s => s.id === staffId);
+
+  // 1. 割り当てリストに追加
+  const duration = visit.duration || 60;
+  const endMinutes = timeToMinutes(startTime) + duration;
+  
+  lastAssignments.push({
+    staffId: staff.id,
+    staffName: staff.name,
+    visitId: visit.id,
+    clientId: visit.clientId,
+    clientName: visit.clientName || '利用者',
+    score: 9999, // 手動割り当ての目印として高スコア
+    startTime: startTime,
+    endTime: minutesToTime(endMinutes),
+    scheduledTime: startTime,
+    duration: duration,
+  });
+
+  // 2. 未割り当てリストから削除
+  lastUnassigned.splice(unassignedIdx, 1);
+
+  // 3. ルート再計算と再描画
+  const resultsDiv = document.getElementById('optimization-results');
+  resultsDiv.innerHTML = '<div style="text-align:center;padding:32px;"><span class="material-icons-round" style="animation:spin 1s linear infinite">sync</span> ルート再計算中...</div>';
+
+  try {
+    const routes = await optimizeRoutes(
+      lastAssignments, 
+      lastActiveStaff, 
+      lastClientList, 
+      DEFAULT_OFFICE,
+      async (points) => {
+        try {
+          await loadGoogleMapsAPI();
+          return await getDistanceMatrix(points);
+        } catch (e) {
+          return null;
+        }
+      }
+    );
+    lastRoutes = routes;
+
+    // 再描画
+    resultsDiv.innerHTML = renderResults(lastStaffList, lastClientList, lastAssignments, lastUnassigned, lastRoutes);
+    attachResultEvents();
+
+    showToast(`${staff.name}さんに手動割り当てし、ルートを再計算しました`, 'success');
+  } catch (error) {
+    showToast('ルート再計算に失敗しました', 'error');
+    console.error(error);
+  }
+}
+

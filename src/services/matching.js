@@ -299,7 +299,8 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
     .map(v => ({ 
       visitId: v.id, 
       clientName: v.clientName || '利用者', 
-      reason: '適格な職員なし、または上限超過' 
+      reason: '適格な職員なし、または上限超過',
+      visit: v
     }));
 
   return { assignments, unassigned };
