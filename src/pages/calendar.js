@@ -1,4 +1,5 @@
 import { getVisitList, deleteVisit, getClientList, getStaffList, updateVisit, saveRoutes, addVisit } from '../services/firestore.js';
+import { navigateTo } from '../app.js';
 import { autoAssign } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
 import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
@@ -177,15 +178,42 @@ function openDayDetailModal(dateStr, allVisits, clientList, staffList) {
     </div>
   `;
 
-  showModal('日付の詳細', bodyHtml, `
-    <button class="btn btn-secondary" id="modal-close-btn">閉じる</button>
-    <button class="btn btn-primary" id="modal-add-visit-btn" data-date="${dateStr}">
-      <span class="material-icons-round">add</span> 予定を追加
-    </button>
+  showModal(`日付の詳細: ${dateStr}`, bodyHtml, `
+    <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-outline btn-nav" data-target="schedule" data-date="${dateStr}" style="padding:6px 12px; font-size:0.85rem; border-color:var(--border);">
+          <span class="material-icons-round" style="font-size:16px;">calendar_today</span> スケジュール
+        </button>
+        <button class="btn btn-outline btn-nav" data-target="map" data-date="${dateStr}" style="padding:6px 12px; font-size:0.85rem; border-color:var(--border);">
+          <span class="material-icons-round" style="font-size:16px;">map</span> マップ
+        </button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" id="modal-close-btn">閉じる</button>
+        <button class="btn btn-primary" id="modal-add-visit-btn" data-date="${dateStr}">
+          <span class="material-icons-round">add</span> 追加
+        </button>
+      </div>
+    </div>
   `);
 
   document.getElementById('modal-close-btn').addEventListener('click', closeModal);
-  
+  document.getElementById('modal-add-visit-btn').addEventListener('click', (e) => {
+    closeModal();
+    // 実際は追加画面を開くなどの処理
+    showToast(`${e.currentTarget.dataset.date}の予定追加（※デモ用）`, 'info');
+  });
+
+  document.querySelectorAll('.btn-nav').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const target = e.currentTarget.dataset.target;
+      const date = e.currentTarget.dataset.date;
+      localStorage.setItem('navDate', date);
+      closeModal();
+      navigateTo(target);
+    });
+  });
+
   // 予定の削除
   document.querySelectorAll('.btn-cancel-visit').forEach(btn => {
     btn.addEventListener('click', async (e) => {

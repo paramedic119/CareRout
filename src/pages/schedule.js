@@ -4,6 +4,11 @@ import { SERVICE_TYPES, COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/const
 import { today, formatDate, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml, timeToMinutes, calculateVisitIncome, calculateCustomRevenue } from '../utils/helpers.js';
 
 let selectedDate = today();
+const savedDate = localStorage.getItem('navDate');
+if (savedDate) {
+  selectedDate = savedDate;
+  localStorage.removeItem('navDate');
+}
 
 export async function renderSchedule() {
   const container = document.getElementById('page-container');

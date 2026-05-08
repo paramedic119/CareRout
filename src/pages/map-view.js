@@ -6,6 +6,11 @@ import { today, formatDateJP } from '../utils/helpers.js';
 
 let staffFilter = 'all';
 let mapDate = today();
+const savedDate = localStorage.getItem('navDate');
+if (savedDate) {
+  mapDate = savedDate;
+  localStorage.removeItem('navDate');
+}
 
 export async function renderMapView() {
   const container = document.getElementById('page-container');
