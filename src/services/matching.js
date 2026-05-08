@@ -3,8 +3,8 @@ import { MATCHING_WEIGHTS } from '../utils/constants.js';
 import { haversineDistance, timeToMinutes, minutesToTime } from '../utils/helpers.js';
 
 /**
- * 基準時間から前後30分の候補時間を生成する
- * 優先順位: 元の時間 → +30分 → -30分
+ * 基準時間から前後15分の候補時間を生成する
+ * 優先順位: 元の時間 → +15分 → -15分
  * @param {string} baseTime - 基準開始時間 (例: '09:00')
  * @param {number} duration - 訪問所要時間（分）
  * @returns {Array} 候補時間の配列
@@ -15,19 +15,27 @@ function generateTimeOptions(baseTime, duration) {
     { startTime: baseTime, duration },
   ];
 
-  // +30分の候補（18:00を超えない範囲）
-  const laterMinutes = baseMinutes + 30;
+  // +15分の候補（18:00を超えない範囲）
+  const laterMinutes = baseMinutes + 15;
   if (laterMinutes + duration <= 18 * 60) {
     options.push({ startTime: minutesToTime(laterMinutes), duration });
   }
 
-  // -30分の候補（07:00より前にならない範囲）
-  const earlierMinutes = baseMinutes - 30;
+  // -15分の候補（07:00より前にならない範囲）
+  const earlierMinutes = baseMinutes - 15;
   if (earlierMinutes >= 7 * 60) {
     options.push({ startTime: minutesToTime(earlierMinutes), duration });
   }
 
   return options;
+}
+
+/**
+ * 時間帯（午前・午後）を判定する（12:30を境界）
+ */
+function getPeriod(timeStr) {
+  if (!timeStr) return 'AM';
+  return timeToMinutes(timeStr) < 12 * 60 + 30 ? 'AM' : 'PM';
 }
 
 /**
@@ -65,8 +73,11 @@ export function calculateMatchScores(staffList, clientList) {
 
 /**
  * 職員と利用者の1対1マッチスコアを評価
+ * @param {Object} staff - 職員データ
+ * @param {Object} client - 利用者データ
+ * @param {Object} travelContext - 移動コンテキスト { lat, lng, isTransition }
  */
-function evaluateMatch(staff, client) {
+function evaluateMatch(staff, client, travelContext = null) {
   let score = 0;
   const reasons = [];
   let eligible = true;
@@ -118,14 +129,37 @@ function evaluateMatch(staff, client) {
   }
 
   // 5. 距離ボーナス（近いほど高得点）
-  if (staff.lat && client.lat) {
-    const dist = haversineDistance(staff.lat, staff.lng, client.lat, client.lng);
-    // 同じエリアなら10分、違うエリアなら20分などの概念を簡略化して距離で評価
-    const proximityScore = Math.max(0, MATCHING_WEIGHTS.proximity * (1 - dist / 10));
+  // travelContext（直前の地点）があればそれを使用、なければ拠点の座標を使用
+  const lat1 = travelContext?.lat || staff.lat;
+  const lng1 = travelContext?.lng || staff.lng;
+
+  if (lat1 && client.lat) {
+    const dist = haversineDistance(lat1, lng1, client.lat, client.lng);
+    let weight = MATCHING_WEIGHTS.proximity;
+    
+    // ブロック跨ぎ（午前->午後）の場合は、エリア移動を許容するため距離ペナルティを緩和
+    if (travelContext?.isTransition) {
+      weight = weight * 0.2; // 影響度を20%に縮小
+      reasons.push(`ℹ️ ブロック移動（エリア移動許容）`);
+    }
+
+    const proximityScore = Math.max(0, weight * (1 - dist / 10));
     score += proximityScore;
+    if (proximityScore > weight * 0.8) {
+      reasons.push(`✅ 近距離ボーナス (+${Math.round(proximityScore)})`);
+    }
   }
 
   return { score: Math.round(score), reasons, eligible };
+}
+
+/**
+ * 職員の1日あたり訪問件数上限を取得する
+ * 前川さんは管理業務があるため上限3件
+ */
+function getVisitLimit(staff) {
+  if (staff.name?.includes('前川')) return 3;
+  return staff.maxVisits || (staff.type === 'パート' ? 5 : 10);
 }
 
 /**
@@ -159,9 +193,21 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
   });
   
   for (const visit of sortedVisits) {
-    // 既にこの利用者が同じ日に割り当て済みの場合（重複データの防止）
-    // 修正B: 重複スキップした訪問もassignedVisitsに追加し、未割り当てリストに含めない
-    if (assignments.some(a => a.clientId === visit.clientId)) {
+    // 同じ利用者が同じ時間帯に割り当て済みの場合のみスキップする（完全な重複データの防止）
+    // 1日複数回訪問（別の時間帯）は許可する
+    const isDuplicateTime = assignments.some(a => {
+      if (a.clientId !== visit.clientId) return false;
+      
+      const aStart = timeToMinutes(a.startTime);
+      const aEnd = aStart + (a.duration || 60);
+      const vStart = timeToMinutes(visit.startTime || visit.scheduledTime || '09:00');
+      const vEnd = vStart + (visit.duration || 60);
+      
+      // 時間が重なっている場合は同一の訪問の重複データとみなす
+      return vStart < aEnd && vEnd > aStart;
+    });
+
+    if (isDuplicateTime) {
       assignedVisits.add(visit.id);
       continue;
     }
@@ -171,9 +217,25 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
       .map(staff => {
         // visitから利用者データを引き当ててスキルチェックに使用
         const client = clientList.find(c => c.id === visit.clientId);
-        const { score, eligible: matchEligible } = evaluateMatch(staff, client || visit);
+
+        // --- 直前の訪問地点とブロック跨ぎ判定の取得 ---
+        const staffAssignments = assignments.filter(a => a.staffId === staff.id);
+        const lastA = staffAssignments.length > 0 ? staffAssignments[staffAssignments.length - 1] : null;
         
-        // 修正A: 候補時間の試行（timeOptionsがなければ±30分の候補を自動生成）
+        let travelContext = null;
+        if (lastA) {
+          // 直前の利用者の座標を取得
+          const lastClient = clientList.find(c => c.id === lastA.clientId);
+          if (lastClient) {
+            const currentStartTime = visit.startTime || visit.scheduledTime || '09:00';
+            const isTransition = getPeriod(lastA.startTime) !== getPeriod(currentStartTime);
+            travelContext = { lat: lastClient.lat, lng: lastClient.lng, isTransition };
+          }
+        }
+
+        const { score, eligible: matchEligible } = evaluateMatch(staff, client || visit, travelContext);
+        
+        // 修正A: 候補時間の試行（timeOptionsがなければ±15分の候補を自動生成）
         const baseTime = visit.startTime || visit.scheduledTime || '09:00';
         const baseDuration = visit.duration || 60;
         const options = (visit.timeOptions && visit.timeOptions.length > 0) 
@@ -246,29 +308,35 @@ export function autoAssign(staffList, visitList, clientList = [], globalMatrix =
       const countA = staffVisitCount[a.staff.id] || 0;
       const countB = staffVisitCount[b.staff.id] || 0;
 
-      // 1. パートの上限チェック（個別設定があればそれを優先）
-      const limitA = a.staff.maxVisits || (a.staff.type === 'パート' ? 5 : 10);
-      const limitB = b.staff.maxVisits || (b.staff.type === 'パート' ? 5 : 10);
+      // 1. 訪問件数の上限チェック（前川さん=3件, パート=5件, 正社員=10件）
+      const limitA = getVisitLimit(a.staff);
+      const limitB = getVisitLimit(b.staff);
       const isOverA = countA >= limitA;
       const isOverB = countB >= limitB;
 
       if (isOverA !== isOverB) return isOverA ? 1 : -1;
 
-      // 2. 訪問件数が少ない人を優先（均等化）
+      // 2. 正社員の最低保証（7件未満の正社員を優先的に割り当て）
+      const MIN_FULLTIME_VISITS = 7;
+      const needsMoreA = a.staff.type === '正社員' && !a.staff.name?.includes('前川') && countA < MIN_FULLTIME_VISITS;
+      const needsMoreB = b.staff.type === '正社員' && !b.staff.name?.includes('前川') && countB < MIN_FULLTIME_VISITS;
+      if (needsMoreA !== needsMoreB) return needsMoreA ? -1 : 1;
+
+      // 3. 訪問件数が少ない人を優先（均等化）
       if (countA !== countB) return countA - countB;
 
-      // 3. 正社員を優先
+      // 4. 正社員を優先
       if (a.staff.type !== b.staff.type) {
         return a.staff.type === '正社員' ? -1 : 1;
       }
 
-      // 4. マッチングスコアで比較
+      // 5. マッチングスコアで比較
       return b.score - a.score;
     });
 
     const bestMatch = candidates[0];
     const currentCount = staffVisitCount[bestMatch.staff.id] || 0;
-    const limit = bestMatch.staff.maxVisits || (bestMatch.staff.type === 'パート' ? 5 : 10);
+    const limit = getVisitLimit(bestMatch.staff);
 
     if (currentCount < limit) {
       const chosenStart = bestMatch.chosenTime.startTime;

@@ -4,6 +4,7 @@ import { renderMapView } from './pages/map-view.js';
 import { renderStaffManage } from './pages/staff-manage.js';
 import { renderClientManage } from './pages/client-manage.js';
 import { renderSchedule } from './pages/schedule.js';
+import { renderCalendar } from './pages/calendar.js';
 import { renderMatching } from './pages/matching.js';
 import { renderRevenue } from './pages/revenue.js';
 import { renderMySchedule } from './pages/my-schedule.js';
@@ -14,7 +15,8 @@ const pages = {
   map: { render: renderMapView, title: 'マップビュー' },
   staff: { render: renderStaffManage, title: '職員管理' },
   client: { render: renderClientManage, title: '利用者管理' },
-  schedule: { render: renderSchedule, title: 'スケジュール' },
+  schedule: { render: renderSchedule, title: '日別スケジュール' },
+  calendar: { render: renderCalendar, title: '月間カレンダー' },
   matching: { render: renderMatching, title: 'マッチング＆最適化' },
   revenue: { render: renderRevenue, title: '収支シミュレーション' },
   'my-schedule': { render: renderMySchedule, title: 'マイスケジュール' },

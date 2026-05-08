@@ -123,6 +123,8 @@ function showMainApp(user) {
   document.getElementById('nav-staff').style.display = displayAdmin;
   document.getElementById('nav-client').style.display = displayAdmin;
   document.getElementById('nav-schedule').style.display = displayAdmin;
+  const navCalendar = document.getElementById('nav-calendar');
+  if (navCalendar) navCalendar.style.display = displayAdmin;
   document.getElementById('nav-matching').style.display = displayAdmin;
   const revenueNav = document.getElementById('nav-revenue');
   if (revenueNav) revenueNav.style.display = displayAdmin;

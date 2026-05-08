@@ -79,7 +79,7 @@ export const MATCHING_WEIGHTS = {
   requiredSkill: 1000,   // 必須スキル（満たさないと割り当て不可）
   genderMatch: 2000,     // 性別希望（女性希望への男性配置は厳禁=マイナスで除外）
   staffType: 500,        // 正社員優先
-  proximity: 30,         // 距離（エリア）の近さ
+  proximity: 500,        // 距離（エリア）の近さ（重要度アップ）
 };
 
 // エリアと移動時間（分）
