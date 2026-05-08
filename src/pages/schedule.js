@@ -457,10 +457,12 @@ async function generateWeeklySchedule() {
       // 既にこの日のこの利用者のベース枠がある場合、候補時間(timeOptions)として追加
       if (dailyVisitMap.has(processKey)) {
         const existingData = dailyVisitMap.get(processKey);
-        existingData.timeOptions.push({
-          startTime: visit.startTime || '09:00',
-          duration: visit.duration || 60
-        });
+        if (existingData) {
+          existingData.timeOptions.push({
+            startTime: visit.startTime || '09:00',
+            duration: visit.duration || 60
+          });
+        }
         continue;
       }
 
