@@ -1,9 +1,9 @@
-import { getVisitList, deleteVisit, getClientList, getStaffList, updateVisit, saveRoutes } from '../services/firestore.js';
+import { getVisitList, deleteVisit, getClientList, getStaffList, updateVisit, saveRoutes, addVisit } from '../services/firestore.js';
 import { autoAssign } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
 import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
-import { today, formatDate, escapeHtml, showModal, closeModal, confirmDialog, showToast } from '../utils/helpers.js';
+import { today, formatDate, escapeHtml, showModal, closeModal, confirmDialog, showToast, timeToMinutes, calculateVisitIncome } from '../utils/helpers.js';
 
 let currentDate = new Date();
 
@@ -35,6 +35,9 @@ export async function renderCalendar() {
         月間カレンダー
       </h1>
       <div class="btn-group">
+        <button class="btn btn-outline" id="cal-generate-month" style="margin-right: 8px;">
+          <span class="material-icons-round">event_note</span> 表示月の予定を生成
+        </button>
         <button class="btn btn-primary" id="cal-weekly-opt" style="margin-right: 16px; font-weight: bold;">
           <span class="material-icons-round">auto_fix_high</span> 来週分を一括再マッチング
         </button>
@@ -118,6 +121,7 @@ export async function renderCalendar() {
     renderCalendar();
   });
 
+  document.getElementById('cal-generate-month').addEventListener('click', generateMonthSchedule);
   document.getElementById('cal-weekly-opt').addEventListener('click', runWeeklyOptimization);
 
   // 日付クリックで詳細モーダルを開く
@@ -244,32 +248,28 @@ async function runWeeklyOptimization() {
       getVisitList()
     ]);
 
-    // 距離行列の取得
+    // 距離行列の取得（全体を取得するとAPIの要素数制限に引っかかるため、ここではnullを渡して直線距離と固定時間で概算マッチングを行う）
     const allPoints = [
       { id: 'office', ...DEFAULT_OFFICE },
       ...clientList.map(c => ({ id: c.id, lat: c.lat, lng: c.lng }))
     ];
     let globalDistanceMatrix = null;
-    try {
-      await loadGoogleMapsAPI();
-      globalDistanceMatrix = await getDistanceMatrix(allPoints);
-    } catch (e) {
-      console.warn('距離行列の取得に失敗:', e);
-    }
 
     const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
     let optimizedCount = 0;
 
     for (const dateStr of targetDates) {
-      const d = new Date(dateStr);
-      const dayOfWeekStr = dayNames[d.getDay()];
+      // タイムゾーンによる曜日ズレを防ぐため、手動でパース
+      const [y, m, dayNum] = dateStr.split('-');
+      const dObj = new Date(y, m - 1, dayNum);
+      const dayOfWeekStr = dayNames[dObj.getDay()];
 
       // その日の予定を抽出（キャンセル済みのものは既に削除されている前提）
       const dayVisits = allVisits.filter(v => v.date === dateStr);
       if (dayVisits.length === 0) continue;
 
-      // その日出勤予定のスタッフを抽出
-      const activeStaff = staffList.filter(s => s.isActive && s.days?.includes(dayOfWeekStr));
+      // その日出勤予定のスタッフを抽出（daysプロパティが配列かどうかもチェック）
+      const activeStaff = staffList.filter(s => s.isActive && Array.isArray(s.days) && s.days.includes(dayOfWeekStr));
       if (activeStaff.length === 0) continue;
 
       // マッチング実行
@@ -348,4 +348,104 @@ async function runWeeklyOptimization() {
     btn.disabled = false;
   }
 }
+
+// === 月間ベース予定生成処理 ===
+async function generateMonthSchedule() {
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const ok = await confirmDialog(
+    '月間予定のベース生成',
+    `<b>${year}年${month + 1}月</b> の基本スケジュールを利用者の基本曜日から自動生成しますか？<br><br>※すでにカレンダー上に存在する日の予定は上書きされずスキップされます。`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('cal-generate-month');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="material-icons-round" style="animation:spin 1s linear infinite">sync</span> 生成中...';
+  btn.disabled = true;
+
+  try {
+    const [clientList, allVisits] = await Promise.all([
+      getClientList(),
+      getVisitList(),
+    ]);
+
+    const dayMap = { '日': 0, '月': 1, '火': 2, '水': 3, '木': 4, '金': 5, '土': 6 };
+    // ベースとなるテンプレート訪問（dayOfWeekが設定されているもの）
+    const visitSchedules = allVisits.filter(v => v.dayOfWeek && dayMap[v.dayOfWeek] !== undefined);
+
+    if (visitSchedules.length === 0) {
+      showToast('ベースとなる予定テンプレート（曜日設定）がありません。デモデータを登録してください。', 'warning');
+      return;
+    }
+
+    let createdCount = 0;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(year, month, i);
+      const dateStr = formatDate(d);
+      const dayOfWeekNum = d.getDay(); // 0:日, 1:月...
+
+      // その日の曜日と一致するテンプレートを抽出
+      const templatesForDay = visitSchedules.filter(v => dayMap[v.dayOfWeek] === dayOfWeekNum);
+      if (templatesForDay.length === 0) continue;
+
+      // すでにその日の予定が存在するかチェック（クライアントIDで重複排除）
+      const existingVisits = allVisits.filter(v => v.date === dateStr);
+      const existingClientIds = new Set(existingVisits.map(v => v.clientId));
+
+      for (const tmpl of templatesForDay) {
+        if (existingClientIds.has(tmpl.clientId)) continue; // すでに予定があればスキップ
+
+        const client = clientList.find(c => c.id === tmpl.clientId);
+        const service = tmpl.service || client?.requiredServices?.[0] || '身体介護';
+        const duration = tmpl.duration || client?.visitDuration || 60;
+        const startTime = tmpl.startTime || '09:00';
+        let income = 0;
+        try {
+          income = calculateVisitIncome(service, duration);
+        } catch(e) { income = 4000; } // default
+
+        const endMinutes = timeToMinutes(startTime) + duration;
+        const endH = Math.floor(endMinutes / 60);
+        const endM = endMinutes % 60;
+        const endTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
+
+        await addVisit({
+          date: dateStr,
+          clientId: tmpl.clientId,
+          clientName: tmpl.clientName || client?.name || '利用者',
+          staffId: null, // ベース作成時は未設定
+          staffName: '未設定',
+          startTime,
+          endTime,
+          scheduledTime: startTime,
+          duration,
+          service,
+          income,
+          dayOfWeek: tmpl.dayOfWeek,
+          status: 'scheduled'
+        });
+        createdCount++;
+      }
+    }
+
+    if (createdCount > 0) {
+      showToast(`${year}年${month + 1}月の予定を ${createdCount}件 生成しました！`, 'success');
+      renderCalendar(); // カレンダー再描画
+    } else {
+      showToast('新しく生成する予定がありませんでした（既存の予定が設定済み）。', 'info');
+    }
+
+  } catch (error) {
+    console.error('月間スケジュール生成エラー:', error);
+    showToast('スケジュールの生成に失敗しました: ' + error.message, 'error');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
+
 
