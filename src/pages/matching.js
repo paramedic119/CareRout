@@ -24,8 +24,8 @@ export async function renderMatching() {
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">
-        <span class="material-icons-round">auto_fix_high</span>
-        マッチング＆ルート最適化
+        <span class="material-icons-round">tune</span>
+        特定日の手動マッチング調整
       </h1>
       <div style="display:flex;align-items:center;gap:12px">
         <input type="date" id="match-date-picker" class="form-input" value="${selectedDate}" style="width:160px">

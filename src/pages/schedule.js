@@ -16,15 +16,11 @@ export async function renderSchedule() {
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">
-        <span class="material-icons-round">calendar_month</span>
-        スケジュール管理
+        <span class="material-icons-round">view_day</span>
+        日別スケジュール確認
       </h1>
       <div class="btn-group">
         <input type="date" id="schedule-date" class="form-input" value="${selectedDate}" style="width:180px" />
-        <button class="btn btn-secondary" id="btn-generate-week">
-          <span class="material-icons-round">date_range</span>
-          今週の予定を自動生成
-        </button>
         <button class="btn btn-primary" id="btn-add-visit">
           <span class="material-icons-round">add</span>
           訪問追加
@@ -42,7 +38,6 @@ export async function renderSchedule() {
   });
 
   document.getElementById('btn-add-visit').addEventListener('click', openVisitForm);
-  document.getElementById('btn-generate-week').addEventListener('click', generateWeeklySchedule);
 
   await loadSchedule();
 }
@@ -415,128 +410,6 @@ async function openVisitForm() {
       showToast('追加に失敗しました', 'error');
     }
   };
-}
-
-/**
- * 今週のスケジュールを利用者の曜日設定から一括生成
- */
-async function generateWeeklySchedule() {
-  const ok = await confirmDialog(
-    '週間スケジュール自動生成',
-    '利用者の曜日設定に基づいて、今週（月〜土）の訪問予定を自動生成します。\n既存の予定がある日はスキップされます。\n\n実行しますか？'
-  );
-  if (!ok) return;
-
-  try {
-    const [clientList, allVisits] = await Promise.all([
-      getClientList(),
-      getVisitList(),
-    ]);
-
-    const dayMap = { '月': 1, '火': 2, '水': 3, '木': 4, '金': 5, '土': 6 };
-    const todayObj = new Date();
-    const currentDayOfWeek = todayObj.getDay(); // 0:日, 1:月...
-
-    // 利用者ごとの曜日別訪問予定を取得
-    const visitSchedules = allVisits.filter(v => v.dayOfWeek && dayMap[v.dayOfWeek] !== undefined);
-
-    let createdCount = 0;
-    let skippedCount = 0;
-    // 今回の実行で既に追加（またはスキップ対象と判断）した「日付-利用者」を記録
-    // 値として、その訪問データのインデックスまたは候補リストを保持するように変更
-    const dailyVisitMap = new Map();
-
-    for (const visit of visitSchedules) {
-      const targetDayNum = dayMap[visit.dayOfWeek];
-      if (targetDayNum === undefined) continue;
-
-      // 今週の該当曜日の日付を計算
-      const diff = targetDayNum - currentDayOfWeek;
-      const targetDate = new Date(todayObj);
-      targetDate.setDate(todayObj.getDate() + diff);
-      const dateStr = formatDate(targetDate);
-
-      // 重複チェック用のキー
-      const processKey = `${dateStr}_${visit.clientId}`;
-      
-      // 既にこの日のこの利用者のベース枠がある場合、候補時間(timeOptions)として追加
-      if (dailyVisitMap.has(processKey)) {
-        const existingData = dailyVisitMap.get(processKey);
-        if (existingData) {
-          existingData.timeOptions.push({
-            startTime: visit.startTime || '09:00',
-            duration: visit.duration || 60
-          });
-        }
-        continue;
-      }
-
-      // DBチェック（既存の予定がある場合はMapに空（スキップ対象）として記録）
-      const existingVisits = await getVisitsByDate(dateStr);
-      if (existingVisits.some(ev => ev.clientId === visit.clientId)) {
-        dailyVisitMap.set(processKey, null); // スキップ対象
-        skippedCount++;
-        continue;
-      }
-
-      // 新規枠としてMapに登録
-      dailyVisitMap.set(processKey, {
-        ...visit,
-        date: dateStr,
-        timeOptions: [{
-          startTime: visit.startTime || '09:00',
-          duration: visit.duration || 60
-        }]
-      });
-    }
-
-    // 集約されたデータをDBに登録
-    for (const [key, data] of dailyVisitMap) {
-      if (!data) continue;
-
-      const client = clientList.find(c => c.id === data.clientId);
-      const service = data.service || (client?.requiredServices?.[0]) || '身体介護';
-      const duration = data.duration || client?.visitDuration || 60;
-      const startTime = data.startTime || '09:00';
-      const income = calculateVisitIncome(service, duration);
-
-      // 終了時刻を計算
-      const endMinutes = timeToMinutes(startTime) + duration;
-      const endH = Math.floor(endMinutes / 60);
-      const endM = endMinutes % 60;
-      const endTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
-
-      await addVisit({
-        date: data.date,
-        clientId: data.clientId,
-        clientName: data.clientName || client?.name || '利用者',
-        staffId: data.staffId || null,
-        staffName: data.staffName || '未設定',
-        startTime,
-        endTime,
-        scheduledTime: startTime,
-        duration,
-        service,
-        income,
-        dayOfWeek: data.dayOfWeek,
-        status: 'scheduled',
-        timeOptions: data.timeOptions // 複数候補を保持
-      });
-      createdCount++;
-    }
-
-    if (createdCount > 0) {
-      showToast(`今週の訪問予定 ${createdCount}件 を自動生成しました！${skippedCount > 0 ? `（${skippedCount}件は既存のためスキップ）` : ''}`, 'success');
-    } else {
-      showToast(`生成する予定がありませんでした。${skippedCount > 0 ? `（${skippedCount}件は既に登録済み）` : '利用者の曜日設定を確認してください。'}`, 'warning');
-    }
-
-    await loadSchedule();
-
-  } catch (error) {
-    console.error('週間スケジュール生成エラー:', error);
-    showToast('スケジュール生成に失敗しました: ' + error.message, 'error');
-  }
 }
 
 // イベント委譲（削除ボタン）

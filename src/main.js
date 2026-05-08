@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (user) {
         console.log('✅ ログイン:', user.email);
         showMainApp(user);
-        await navigateTo('dashboard');
+        await navigateTo('calendar');
       } else {
         showLoginScreen();
       }
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadDemoData(true);
     }
     
-    await navigateTo('dashboard');
+    await navigateTo('calendar');
     showToast('管理者デモモードで起動しました', 'info');
   });
 
@@ -238,7 +238,7 @@ async function loadDemoData(skipConfirm = false) {
     showToast(`予定 ${DEMO_VISIT_SCHEDULES.length}件 を登録しました`, 'success');
 
     // ダッシュボードを再表示
-    await navigateTo('dashboard');
+    await navigateTo('calendar');
 
     // ボタンを成功状態に変更
     btn.innerHTML = `

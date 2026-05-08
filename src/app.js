@@ -11,18 +11,18 @@ import { renderMySchedule } from './pages/my-schedule.js';
 
 // ページ定義
 const pages = {
+  calendar: { render: renderCalendar, title: '全体スケジュール' },
+  schedule: { render: renderSchedule, title: '日別スケジュール確認' },
+  map: { render: renderMapView, title: '日別ルートマップ' },
   dashboard: { render: renderDashboard, title: 'ダッシュボード' },
-  map: { render: renderMapView, title: 'マップビュー' },
   staff: { render: renderStaffManage, title: '職員管理' },
   client: { render: renderClientManage, title: '利用者管理' },
-  schedule: { render: renderSchedule, title: '日別スケジュール' },
-  calendar: { render: renderCalendar, title: '月間カレンダー' },
-  matching: { render: renderMatching, title: 'マッチング＆最適化' },
+  matching: { render: renderMatching, title: '特定日の手動調整' },
   revenue: { render: renderRevenue, title: '収支シミュレーション' },
   'my-schedule': { render: renderMySchedule, title: 'マイスケジュール' },
 };
 
-let currentPage = 'dashboard';
+let currentPage = 'calendar';
 
 /**
  * ナビゲーションを初期化

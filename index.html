@@ -71,17 +71,24 @@
           </button>
         </div>
         <ul class="sidebar-nav">
-          <li class="nav-item active" data-page="dashboard" id="nav-dashboard">
-            <span class="material-icons-round">dashboard</span>
-            <span class="nav-label">ダッシュボード</span>
+          <div class="sidebar-category">メイン業務</div>
+          <li class="nav-item active" data-page="calendar" id="nav-calendar">
+            <span class="material-icons-round" style="color:var(--primary)">event_note</span>
+            <span class="nav-label">全体スケジュール<br><small style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;">(運用司令塔)</small></span>
           </li>
-          <li class="nav-item" data-page="my-schedule" id="nav-my-schedule" style="display:none">
-            <span class="material-icons-round">today</span>
-            <span class="nav-label">マイスケジュール</span>
+          <li class="nav-item" data-page="schedule" id="nav-schedule">
+            <span class="material-icons-round">view_day</span>
+            <span class="nav-label">日別スケジュール確認</span>
           </li>
           <li class="nav-item" data-page="map" id="nav-map">
             <span class="material-icons-round">map</span>
-            <span class="nav-label">マップビュー</span>
+            <span class="nav-label">日別ルートマップ</span>
+          </li>
+
+          <div class="sidebar-category" style="margin-top:16px;">情報管理・その他</div>
+          <li class="nav-item" data-page="dashboard" id="nav-dashboard">
+            <span class="material-icons-round">dashboard</span>
+            <span class="nav-label">ダッシュボード</span>
           </li>
           <li class="nav-item" data-page="staff" id="nav-staff">
             <span class="material-icons-round">badge</span>
@@ -91,21 +98,18 @@
             <span class="material-icons-round">elderly</span>
             <span class="nav-label">利用者管理</span>
           </li>
-          <li class="nav-item" data-page="schedule" id="nav-schedule">
-            <span class="material-icons-round">view_day</span>
-            <span class="nav-label">日別スケジュール</span>
-          </li>
-          <li class="nav-item" data-page="calendar" id="nav-calendar">
-            <span class="material-icons-round">calendar_month</span>
-            <span class="nav-label">月間カレンダー</span>
-          </li>
           <li class="nav-item" data-page="matching" id="nav-matching">
-            <span class="material-icons-round">auto_fix_high</span>
-            <span class="nav-label">マッチング＆最適化</span>
+            <span class="material-icons-round">tune</span>
+            <span class="nav-label">特定日の手動調整</span>
           </li>
           <li class="nav-item" data-page="revenue" id="nav-revenue" style="display:none">
             <span class="material-icons-round">analytics</span>
             <span class="nav-label">収支シミュレーション</span>
+          </li>
+          
+          <li class="nav-item" data-page="my-schedule" id="nav-my-schedule" style="display:none">
+            <span class="material-icons-round">today</span>
+            <span class="nav-label">マイスケジュール</span>
           </li>
         </ul>
         <div class="sidebar-footer">

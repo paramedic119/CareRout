@@ -30,27 +30,58 @@ export async function renderCalendar() {
 
   // カレンダーヘッダーとナビゲーション
   let html = `
-    <div class="page-header">
-      <h1 class="page-title">
-        <span class="material-icons-round">calendar_month</span>
-        月間カレンダー
-      </h1>
-      <div class="btn-group">
-        <button class="btn btn-outline" id="cal-generate-month" style="margin-right: 8px;">
-          <span class="material-icons-round">event_note</span> 表示月の予定を生成
-        </button>
-        <button class="btn btn-primary" id="cal-weekly-opt" style="margin-right: 16px; font-weight: bold;">
-          <span class="material-icons-round">auto_fix_high</span> 来週分を一括再マッチング
-        </button>
-        <button class="btn btn-secondary" id="cal-prev-month">
-          <span class="material-icons-round">chevron_left</span>
-        </button>
-        <div style="font-size: 1.2rem; font-weight: 600; padding: 0 16px;">
-          ${year}年 ${month + 1}月
+    <div class="page-header" style="flex-direction: column; align-items: flex-start; gap: 16px;">
+      <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+        <h1 class="page-title">
+          <span class="material-icons-round" style="color:var(--primary)">event_note</span>
+          全体スケジュール <span style="font-size:1rem;font-weight:normal;color:var(--text-muted);margin-left:8px">(運用司令塔)</span>
+        </h1>
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="cal-prev-month">
+            <span class="material-icons-round">chevron_left</span>
+          </button>
+          <h2 id="cal-current-month" style="margin: 0 16px; font-size: 1.25rem; font-weight:bold;">${year}年 ${month + 1}月</h2>
+          <button class="btn btn-secondary" id="cal-next-month">
+            <span class="material-icons-round">chevron_right</span>
+          </button>
         </div>
-        <button class="btn btn-secondary" id="cal-next-month">
-          <span class="material-icons-round">chevron_right</span>
-        </button>
+      </div>
+      
+      <!-- 運用フローガイドパネル -->
+      <div class="card" style="width:100%; background:rgba(59,130,246,0.05); border:1px solid var(--primary); padding:16px;">
+        <h3 style="font-size:0.9rem; color:var(--primary); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+          <span class="material-icons-round" style="font-size:18px;">info</span>
+          システム運用ステップ
+        </h3>
+        <div class="grid grid-3" style="gap:16px;">
+          <!-- Step 1 -->
+          <div style="background:white; padding:16px; border-radius:8px; box-shadow:var(--shadow-sm); border-top:3px solid var(--border);">
+            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;">STEP 1 (月末作業)</div>
+            <div style="font-size:0.95rem; font-weight:600; margin-bottom:8px;">基本予定の自動作成</div>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">利用者の基本曜日から表示月(1ヶ月分)のベース予定を生成します。</p>
+            <button class="btn btn-outline" id="cal-generate-month" style="width:100%; justify-content:center; border-color:var(--border);">
+              <span class="material-icons-round">event_note</span> 月間予定を生成
+            </button>
+          </div>
+          <!-- Step 2 -->
+          <div style="background:white; padding:16px; border-radius:8px; box-shadow:var(--shadow-sm); border-top:3px solid var(--warning);">
+            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;">STEP 2 (随時)</div>
+            <div style="font-size:0.95rem; font-weight:600; margin-bottom:8px;">お休みの反映・調整</div>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">利用者からお休みの連絡があったら、下のカレンダーで日付をクリックして予定を削除します。</p>
+            <div style="display:flex; justify-content:center; color:var(--warning);">
+              <span class="material-icons-round" style="font-size:32px; opacity:0.5;">mouse</span>
+            </div>
+          </div>
+          <!-- Step 3 -->
+          <div style="background:white; padding:16px; border-radius:8px; box-shadow:var(--shadow-sm); border-top:3px solid var(--primary);">
+            <div style="font-weight:bold; font-size:0.85rem; color:var(--primary); margin-bottom:8px;">STEP 3 (毎週金曜日)</div>
+            <div style="font-size:0.95rem; font-weight:600; margin-bottom:8px;">ルートの自動最適化</div>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">来週1週間分のお休みなどを加味し、一番効率の良い担当者ルートを再計算して確定します。</p>
+            <button class="btn btn-primary" id="cal-weekly-opt" style="width:100%; justify-content:center; font-weight:bold;">
+              <span class="material-icons-round">auto_fix_high</span> 来週分をルート確定
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     
