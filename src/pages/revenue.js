@@ -2,6 +2,7 @@
 import { getStaffList, getClientList, getVisitsByDate, getRoutesByDate } from '../services/firestore.js';
 import { today, formatDateJP, minutesToTime, timeToMinutes, calculateVisitIncome, calculateCustomRevenue } from '../utils/helpers.js';
 import { COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/constants.js';
+import { navigateTo } from '../app.js';
 
 let selectedDate = today();
 
@@ -15,9 +16,10 @@ export async function renderRevenue() {
         <span class="material-icons-round" style="font-size:64px;color:var(--danger);opacity:.3">lock</span>
         <h3>アクセス権限がありません</h3>
         <p>このページは管理者専用です。</p>
-        <button class="btn btn-primary" onclick="window.location.hash='#dashboard'">ダッシュボードへ戻る</button>
+        <button class="btn btn-primary" id="btn-go-dashboard">ダッシュボードへ戻る</button>
       </div>
     `;
+    document.getElementById('btn-go-dashboard').addEventListener('click', () => navigateTo('dashboard'));
     return;
   }
 

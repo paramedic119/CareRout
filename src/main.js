@@ -77,13 +77,17 @@ document.addEventListener('DOMContentLoaded', () => {
       photoURL: '',
     };
     showMainApp(demoUser);
-    
-    const existingStaff = await getStaffList();
-    if (existingStaff.length === 0) {
+
+    let staffList = await getStaffList();
+    if (staffList.length === 0) {
       showToast('デモデータを自動投入しています...', 'info');
       await loadDemoData(true);
+      staffList = await getStaffList();
     }
-    
+    // デモ用: 最初のアクティブなスタッフをログインユーザーとして設定
+    const firstStaff = staffList.find(s => s.isActive) || staffList[0];
+    window.currentStaffId = firstStaff?.id || null;
+
     await navigateTo('my-schedule');
     showToast('スタッフデモモードで起動しました', 'info');
   });

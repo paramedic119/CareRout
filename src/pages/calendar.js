@@ -229,11 +229,6 @@ function openDayDetailModal(dateStr, allVisits, clientList, staffList) {
   `);
 
   document.getElementById('modal-close-btn').addEventListener('click', closeModal);
-  document.getElementById('modal-add-visit-btn').addEventListener('click', (e) => {
-    closeModal();
-    // 実際は追加画面を開くなどの処理
-    showToast(`${e.currentTarget.dataset.date}の予定追加（※デモ用）`, 'info');
-  });
 
   document.querySelectorAll('.btn-nav').forEach(btn => {
     btn.addEventListener('click', (e) => {

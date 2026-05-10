@@ -56,9 +56,8 @@ export async function renderMySchedule() {
 async function loadAndRenderData(selectedDate) {
   try {
     const visits = await getVisitsByDate(selectedDate);
-    // デモ用として、ログインユーザーが「staff_1 (佐藤 看護師)」であると仮定
-    const myStaffId = 'staff_1'; 
-    const myVisits = visits.filter(v => v.staffId === myStaffId);
+    const myStaffId = window.currentStaffId || null;
+    const myVisits = myStaffId ? visits.filter(v => v.staffId === myStaffId) : [];
 
     // 時間順にソート
     myVisits.sort((a, b) => (a.scheduledTime || a.startTime || '').localeCompare(b.scheduledTime || b.startTime || ''));
@@ -348,8 +347,8 @@ function openAddSalesModal() {
 
     try {
       await addVisit({
-        staffId: 'staff_1',
-        staffName: '佐藤 看護師', // デモ固定
+        staffId: window.currentStaffId || null,
+        staffName: document.getElementById('user-name')?.textContent || 'スタッフ',
         clientId: 'sales_' + Date.now(),
         clientName: name,
         date: selectedDate,
