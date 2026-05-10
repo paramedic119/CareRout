@@ -112,6 +112,29 @@ function openStaffForm(staff = null) {
       </div>
       <div class="form-row">
         <div class="form-group">
+          <label class="form-label">雇用形態 *</label>
+          <select class="form-select" id="sf-type">
+            <option value="正社員" ${(staff?.type || '正社員') === '正社員' ? 'selected' : ''}>正社員</option>
+            <option value="パート" ${staff?.type === 'パート' ? 'selected' : ''}>パート</option>
+          </select>
+        </div>
+        <div class="form-group" id="sf-wage-group" style="${staff?.type === 'パート' ? '' : 'display:none'}">
+          <label class="form-label">時給（円）</label>
+          <input class="form-input" type="number" id="sf-wage" value="${staff?.wage || 1200}" min="800" step="50" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">勤務曜日 *</label>
+        <div class="tags-container" style="gap:8px">
+          ${['月','火','水','木','金','土','日'].map(day => `
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:.9rem">
+              <input type="checkbox" name="sf-day" value="${day}" ${staff?.days?.includes(day) ? 'checked' : ''} /> ${day}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label class="form-label">勤務開始</label>
           <input class="form-input" type="time" id="sf-work-start" value="${staff?.workStart || '08:30'}" />
         </div>
@@ -144,6 +167,10 @@ function openStaffForm(staff = null) {
   showModal(title, bodyHtml, footerHtml);
 
   document.getElementById('sf-cancel').onclick = closeModal;
+
+  document.getElementById('sf-type').addEventListener('change', (e) => {
+    document.getElementById('sf-wage-group').style.display = e.target.value === 'パート' ? '' : 'none';
+  });
   document.getElementById('sf-save').onclick = async () => {
     const name = document.getElementById('sf-name').value.trim();
     if (!name) { showToast('氏名を入力してください', 'warning'); return; }
@@ -173,9 +200,15 @@ function openStaffForm(staff = null) {
       }
     }
 
+    const type = document.getElementById('sf-type').value;
+    const days = Array.from(document.querySelectorAll('input[name="sf-day"]:checked')).map(c => c.value);
+
     const data = {
       name,
       gender: document.getElementById('sf-gender').value,
+      type,
+      wage: type === 'パート' ? parseInt(document.getElementById('sf-wage').value) || 1200 : undefined,
+      days,
       address,
       workStart: document.getElementById('sf-work-start').value,
       workEnd: document.getElementById('sf-work-end').value,

@@ -2,18 +2,26 @@ import { getVisitsByDate, updateVisit, addVisit } from '../services/firestore.js
 import { today, formatDateJP, escapeHtml, showToast } from '../utils/helpers.js';
 import { CANCEL_REASONS, SALES_TARGETS, TIME_SLOTS } from '../utils/constants.js';
 
+let mySelectedDate = today();
+
 export async function renderMySchedule() {
   const container = document.getElementById('page-container');
-  const selectedDate = today();
 
   container.innerHTML = `
     <div class="page-header" style="margin-bottom: 16px;">
       <h1 class="page-title" style="font-size: 1.25rem;">
         <span class="material-icons-round">today</span>
-        本日のスケジュール
+        マイスケジュール
       </h1>
-      <div style="color: var(--text-secondary); font-size: 0.9rem;">
-        ${formatDateJP(new Date(selectedDate))}
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn-icon" id="my-prev-day" title="前の日">
+          <span class="material-icons-round">chevron_left</span>
+        </button>
+        <input type="date" id="my-date-picker" class="form-input" value="${mySelectedDate}" style="width:150px" />
+        <button class="btn-icon" id="my-next-day" title="次の日">
+          <span class="material-icons-round">chevron_right</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" id="my-today-btn">今日</button>
       </div>
     </div>
 
@@ -48,9 +56,38 @@ export async function renderMySchedule() {
     </div>
   `;
 
+  const datePicker = document.getElementById('my-date-picker');
+
+  document.getElementById('my-prev-day').addEventListener('click', () => {
+    const d = new Date(mySelectedDate);
+    d.setDate(d.getDate() - 1);
+    mySelectedDate = d.toISOString().slice(0, 10);
+    datePicker.value = mySelectedDate;
+    loadAndRenderData(mySelectedDate);
+  });
+
+  document.getElementById('my-next-day').addEventListener('click', () => {
+    const d = new Date(mySelectedDate);
+    d.setDate(d.getDate() + 1);
+    mySelectedDate = d.toISOString().slice(0, 10);
+    datePicker.value = mySelectedDate;
+    loadAndRenderData(mySelectedDate);
+  });
+
+  datePicker.addEventListener('change', (e) => {
+    mySelectedDate = e.target.value;
+    loadAndRenderData(mySelectedDate);
+  });
+
+  document.getElementById('my-today-btn').addEventListener('click', () => {
+    mySelectedDate = today();
+    datePicker.value = mySelectedDate;
+    loadAndRenderData(mySelectedDate);
+  });
+
   document.getElementById('btn-add-sales').addEventListener('click', openAddSalesModal);
 
-  await loadAndRenderData(selectedDate);
+  await loadAndRenderData(mySelectedDate);
 }
 
 async function loadAndRenderData(selectedDate) {
@@ -287,7 +324,7 @@ function openCancelModal(visitId, selectedDate) {
 }
 
 function openAddSalesModal() {
-  const selectedDate = today();
+  const selectedDate = mySelectedDate;
   const modalOverlay = document.getElementById('modal-overlay');
   const modalTitle = document.getElementById('modal-title');
   const modalBody = document.getElementById('modal-body');

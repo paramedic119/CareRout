@@ -68,7 +68,7 @@ function renderClientList(list, visits) {
             
             const visitHtml = clientVisits.length > 0
               ? clientVisits.map(v => `<div style="font-size:0.85rem;margin-bottom:2px;">
-                  <span class="tag" style="background:#E2E8F0;color:#333">${v.dayOfWeek || '不明'}</span>
+                  <span class="tag">${v.dayOfWeek || '不明'}</span>
                   ${v.startTime}〜${v.endTime} (${v.duration}分)
                 </div>`).join('')
               : '<span style="color:var(--text-muted)">設定なし</span>';
@@ -114,9 +114,15 @@ function openClientForm(client = null) {
           </select>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">住所 <span style="font-size:.75rem;color:var(--text-muted)">（入力すると地図上の座標を自動取得します）</span></label>
-        <input class="form-input" id="cf-address" value="${client?.address || ''}" placeholder="例: 岐阜県加茂郡富加町..." />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">住所 <span style="font-size:.75rem;color:var(--text-muted)">（入力すると座標を自動取得）</span></label>
+          <input class="form-input" id="cf-address" value="${client?.address || ''}" placeholder="例: 岐阜県加茂郡富加町..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">エリア <span style="font-size:.75rem;color:var(--text-muted)">（スケジュール表示用）</span></label>
+          <input class="form-input" id="cf-area" value="${client?.area || ''}" placeholder="例: 関市" />
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">必要サービス</label>
@@ -206,6 +212,7 @@ function openClientForm(client = null) {
       name,
       careLevel: document.getElementById('cf-care-level').value,
       address,
+      area: document.getElementById('cf-area').value.trim(),
       requiredServices: Array.from(document.querySelectorAll('input[name="cf-service"]:checked')).map(c => c.value),
       requiredSkills: Array.from(document.querySelectorAll('input[name="cf-skill"]:checked')).map(c => c.value),
       genderPreference: document.getElementById('cf-gender-pref').value,

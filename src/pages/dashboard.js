@@ -1,6 +1,7 @@
 // ダッシュボード画面
 import { getStaffList, getClientList, getVisitsByDate } from '../services/firestore.js';
 import { today, formatDateJP } from '../utils/helpers.js';
+import { navigateTo } from '../app.js';
 
 export async function renderDashboard() {
   const container = document.getElementById('page-container');
@@ -147,15 +148,15 @@ export async function renderDashboard() {
           </h3>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <button class="btn btn-primary" onclick="document.querySelector('[data-page=matching]').click()" style="width:100%;justify-content:center">
+          <button class="btn btn-primary" id="dash-btn-matching" style="width:100%;justify-content:center">
             <span class="material-icons-round">auto_fix_high</span>
             マッチング＆ルート最適化を実行
           </button>
-          <button class="btn btn-secondary" onclick="document.querySelector('[data-page=map]').click()" style="width:100%;justify-content:center">
+          <button class="btn btn-secondary" id="dash-btn-map" style="width:100%;justify-content:center">
             <span class="material-icons-round">map</span>
             マップビューを開く
           </button>
-          <button class="btn btn-secondary" onclick="document.querySelector('[data-page=revenue]').click()" style="width:100%;justify-content:center">
+          <button class="btn btn-secondary" id="dash-btn-revenue" style="width:100%;justify-content:center">
             <span class="material-icons-round">analytics</span>
             収支シミュレーションを開く
           </button>
@@ -163,4 +164,8 @@ export async function renderDashboard() {
       </div>
     </div>
   `;
+
+  document.getElementById('dash-btn-matching').addEventListener('click', () => navigateTo('matching'));
+  document.getElementById('dash-btn-map').addEventListener('click', () => navigateTo('map'));
+  document.getElementById('dash-btn-revenue').addEventListener('click', () => navigateTo('revenue'));
 }

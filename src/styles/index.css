@@ -222,6 +222,7 @@ input:focus, select:focus, textarea:focus {
 .stat-card.warning::after { background: var(--warning); }
 .stat-card.success::after { background: var(--success); }
 .stat-card.info::after { background: var(--info); }
+.stat-card.danger::after { background: var(--danger); }
 
 /* --- テーブル --- */
 .data-table { width: 100%; border-collapse: collapse; }
