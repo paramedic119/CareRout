@@ -1619,16 +1619,6 @@ export const DEMO_VISIT_SCHEDULES = [
     "serviceInfo": "生活２・１７９０円"
   },
   {
-    "id": "visit_5",
-    "clientId": "client_21",
-    "dayOfWeek": "水",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 3870,
-    "serviceInfo": "身体２・３８７０円・１５００円"
-  },
-  {
     "id": "visit_6",
     "clientId": "client_52",
     "dayOfWeek": "月",
@@ -1710,136 +1700,6 @@ export const DEMO_VISIT_SCHEDULES = [
   },
   {
     "id": "visit_14",
-    "clientId": "client_51",
-    "dayOfWeek": "土",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_15",
-    "clientId": "client_51",
-    "dayOfWeek": "水",
-    "startTime": "09:00",
-    "endTime": "10:30",
-    "duration": 60,
-    "income": 4520,
-    "serviceInfo": "身２生１・４５２０円・１６００円"
-  },
-  {
-    "id": "visit_16",
-    "clientId": "client_51",
-    "dayOfWeek": "金",
-    "startTime": "09:00",
-    "endTime": "10:30",
-    "duration": 60,
-    "income": 4520,
-    "serviceInfo": "身２生１・４５２０円・１６００円"
-  },
-  {
-    "id": "visit_17",
-    "clientId": "client_51",
-    "dayOfWeek": "月",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_18",
-    "clientId": "client_51",
-    "dayOfWeek": "水",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_19",
-    "clientId": "client_51",
-    "dayOfWeek": "木",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_20",
-    "clientId": "client_51",
-    "dayOfWeek": "金",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_21",
-    "clientId": "client_51",
-    "dayOfWeek": "土",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_22",
-    "clientId": "client_51",
-    "dayOfWeek": "月",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_23",
-    "clientId": "client_51",
-    "dayOfWeek": "火",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_24",
-    "clientId": "client_51",
-    "dayOfWeek": "水",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_25",
-    "clientId": "client_51",
-    "dayOfWeek": "木",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_26",
-    "clientId": "client_51",
-    "dayOfWeek": "金",
-    "startTime": "09:00",
-    "endTime": "10:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_27",
     "clientId": "client_51",
     "dayOfWeek": "土",
     "startTime": "09:00",
@@ -2119,36 +1979,6 @@ export const DEMO_VISIT_SCHEDULES = [
     "serviceInfo": "身体１・２４４０円・１３００円"
   },
   {
-    "id": "visit_55",
-    "clientId": "client_9",
-    "dayOfWeek": "月",
-    "startTime": "12:10",
-    "endTime": "13:10",
-    "duration": 60,
-    "income": 3870,
-    "serviceInfo": "身体２・３８７０円・１５００円"
-  },
-  {
-    "id": "visit_56",
-    "clientId": "client_9",
-    "dayOfWeek": "木",
-    "startTime": "12:10",
-    "endTime": "13:10",
-    "duration": 60,
-    "income": 3870,
-    "serviceInfo": "身体２・３８７０円・１５００円"
-  },
-  {
-    "id": "visit_57",
-    "clientId": "client_9",
-    "dayOfWeek": "土",
-    "startTime": "12:10",
-    "endTime": "13:10",
-    "duration": 60,
-    "income": 3870,
-    "serviceInfo": "身体２・３８７０円・１５００円"
-  },
-  {
     "id": "visit_58",
     "clientId": "client_9",
     "dayOfWeek": "月",
@@ -2349,37 +2179,7 @@ export const DEMO_VISIT_SCHEDULES = [
     "serviceInfo": "身体１・２４４０円・１３００円"
   },
   {
-    "id": "visit_78",
-    "clientId": "client_37",
-    "dayOfWeek": "月",
-    "startTime": "09:00",
-    "endTime": "09:30",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_79",
-    "clientId": "client_37",
-    "dayOfWeek": "金",
-    "startTime": "09:00",
-    "endTime": "09:30",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
     "id": "visit_80",
-    "clientId": "client_37",
-    "dayOfWeek": "水",
-    "startTime": "08:30",
-    "endTime": "09:00",
-    "duration": 60,
-    "income": 2440,
-    "serviceInfo": "身体１・２４４０円・１３００円"
-  },
-  {
-    "id": "visit_81",
     "clientId": "client_37",
     "dayOfWeek": "水",
     "startTime": "08:30",
@@ -3110,16 +2910,6 @@ export const DEMO_VISIT_SCHEDULES = [
   },
   {
     "id": "visit_154",
-    "clientId": "client_63",
-    "dayOfWeek": "火",
-    "startTime": "12:00",
-    "endTime": "13:30",
-    "duration": 60,
-    "income": 4520,
-    "serviceInfo": "身２生１・４５２０円・１６００円"
-  },
-  {
-    "id": "visit_155",
     "clientId": "client_63",
     "dayOfWeek": "火",
     "startTime": "12:00",
