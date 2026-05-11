@@ -90,23 +90,37 @@ export function debounce(fn, delay = 300) {
 
 /**
  * トースト通知を表示
+ * @param {string} message
+ * @param {'success'|'error'|'warning'|'info'} type
+ * @param {number} duration - ミリ秒
+ * @param {Function|null} undoCallback - 「元に戻す」リンクを押したときのコールバック
  */
-export function showToast(message, type = 'info', duration = 3000) {
+export function showToast(message, type = 'info', duration = 4000, undoCallback = null) {
   const container = document.getElementById('toast-container');
   const icons = { success: 'check_circle', error: 'error', warning: 'warning', info: 'info' };
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.innerHTML = `
     <span class="material-icons-round toast-icon">${icons[type] || 'info'}</span>
-    <span>${escapeHtml(message)}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
+    ${undoCallback ? '<button class="toast-undo">元に戻す</button>' : ''}
   `;
   container.appendChild(toast);
-  setTimeout(() => {
+
+  if (undoCallback) {
+    toast.querySelector('.toast-undo').addEventListener('click', () => {
+      toast.remove();
+      undoCallback();
+    });
+  }
+
+  const dismiss = () => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(40px)';
     toast.style.transition = 'all .3s ease';
     setTimeout(() => toast.remove(), 300);
-  }, duration);
+  };
+  setTimeout(dismiss, duration);
 }
 
 /**

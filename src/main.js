@@ -5,7 +5,7 @@ import { initLogin } from './pages/login.js';
 import { initRouter, navigateTo } from './app.js';
 import { addStaff, addClient, getStaffList, getClientList, addVisit, clearAllData } from './services/firestore.js';
 import { DEMO_STAFF, DEMO_CLIENTS, DEMO_VISIT_SCHEDULES } from './data/demo-data.js';
-import { showToast } from './utils/helpers.js';
+import { showToast, confirmDialog } from './utils/helpers.js';
 
 // アプリ初期化
 document.addEventListener('DOMContentLoaded', () => {
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (user) {
         console.log('✅ ログイン:', user.email);
         showMainApp(user);
-        await navigateTo('calendar');
+        await navigateTo(window.isAdmin ? 'calendar' : 'my-schedule');
       } else {
         showLoginScreen();
       }
@@ -38,6 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Firebase未設定のためデモモードで起動します:', e);
     // Firebase未設定時はログイン画面を表示
     showLoginScreen();
+  }
+
+  // E-2: 大文字モード切替
+  const fontBtn = document.getElementById('btn-font-size');
+  if (fontBtn) {
+    const isLarge = localStorage.getItem('careroute_large_text') === '1';
+    if (isLarge) document.body.classList.add('large-text');
+    fontBtn.addEventListener('click', () => {
+      const nowLarge = document.body.classList.toggle('large-text');
+      localStorage.setItem('careroute_large_text', nowLarge ? '1' : '0');
+    });
   }
 
   // ログアウトボタン
@@ -167,7 +178,7 @@ async function loadDemoData(skipConfirm = false) {
   const btn = document.getElementById('btn-load-demo');
 
   // 確認
-  if (!skipConfirm && !confirm('デモデータ（職員6名・利用者20名）を投入しますか？\n既存データには影響しません。')) return;
+  if (!skipConfirm && !await confirmDialog('デモデータ投入', 'デモデータ（職員6名・利用者20名）を投入しますか？既存データには影響しません。')) return;
 
   if (btn) {
     btn.innerHTML = `
@@ -182,7 +193,7 @@ async function loadDemoData(skipConfirm = false) {
     const existingClients = await getClientList();
 
     if (existingStaff.length > 0 || existingClients.length > 0) {
-      if (!skipConfirm && !confirm(`既存のデータを全て削除し、新しいエクセルデータを投入しますか？`)) {
+      if (!skipConfirm && !await confirmDialog('データ上書き確認', '既存のデータを全て削除し、新しいデモデータを投入しますか？')) {
         if (btn) {
           btn.innerHTML = `
             <span class="material-icons-round" style="color:var(--secondary)">science</span>

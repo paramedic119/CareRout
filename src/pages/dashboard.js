@@ -78,29 +78,33 @@ export async function renderDashboard() {
             ? '<p style="color:var(--text-muted);text-align:center;padding:20px">職員が登録されていません</p>'
             : activeStaff.map(s => {
                 const sVisits = allVisits.filter(v => v.staffId === s.id);
-                const sComp = sVisits.filter(v => v.status === 'completed').length;
-                const sCanc = sVisits.filter(v => v.status === 'cancelled').length;
+                const sComp  = sVisits.filter(v => v.status === 'completed').length;
+                const sCanc  = sVisits.filter(v => v.status === 'cancelled').length;
                 const sSales = salesVisits.filter(v => v.staffId === s.id).length;
-                
+                const pct    = sVisits.length > 0 ? Math.round(sComp / sVisits.length * 100) : 0;
+
                 return `
-                  <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
-                    <div style="width:12px;height:12px;border-radius:50%;background:${s.color || '#999'};flex-shrink:0"></div>
-                    <div style="flex:1">
-                      <div style="font-weight:600">${s.name}</div>
-                      <div style="font-size:.8rem;color:var(--text-muted)">訪問: ${sVisits.length}件</div>
+                  <div class="staff-status-row">
+                    <div class="staff-status-dot" style="background:${s.color || '#999'}"></div>
+                    <div class="staff-status-info">
+                      <div class="staff-status-name">${s.name}</div>
+                      <div class="staff-status-sub">訪問: ${sVisits.length}件</div>
+                      <div class="progress-bar">
+                        <div class="progress-fill" style="width:${pct}%"></div>
+                      </div>
                     </div>
-                    <div style="display:flex; gap:16px;">
-                      <div style="text-align:center;">
-                        <div style="font-size:0.7rem; color:var(--text-muted);">完了</div>
-                        <div style="font-weight:bold; color:var(--success);">${sComp}</div>
+                    <div class="staff-status-stats">
+                      <div class="staff-stat-item">
+                        <div class="staff-stat-label">完了</div>
+                        <div class="staff-stat-value" style="color:var(--success)">${sComp}</div>
                       </div>
-                      <div style="text-align:center;">
-                        <div style="font-size:0.7rem; color:var(--text-muted);">キャンセル</div>
-                        <div style="font-weight:bold; color:${sCanc > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${sCanc}</div>
+                      <div class="staff-stat-item">
+                        <div class="staff-stat-label">キャンセル</div>
+                        <div class="staff-stat-value" style="color:${sCanc > 0 ? 'var(--danger)' : 'var(--text-muted)'}">${sCanc}</div>
                       </div>
-                      <div style="text-align:center;">
-                        <div style="font-size:0.7rem; color:var(--text-muted);">営業</div>
-                        <div style="font-weight:bold; color:${sSales > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${sSales}</div>
+                      <div class="staff-stat-item">
+                        <div class="staff-stat-label">営業</div>
+                        <div class="staff-stat-value" style="color:${sSales > 0 ? 'var(--warning)' : 'var(--text-muted)'}">${sSales}</div>
                       </div>
                     </div>
                   </div>

@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
   <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#3b82f6" />
+  <meta name="theme-color" content="#0D9488" />
 </head>
 <body>
   <div id="app">
@@ -99,12 +99,12 @@
             <span class="nav-label">利用者管理</span>
           </li>
           <li class="nav-item" data-page="matching" id="nav-matching">
-            <span class="material-icons-round">tune</span>
-            <span class="nav-label">特定日の手動調整</span>
+            <span class="material-icons-round">auto_fix_high</span>
+            <span class="nav-label">自動シフト最適化<br><small style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;">(マッチング)</small></span>
           </li>
           <li class="nav-item" data-page="revenue" id="nav-revenue" style="display:none">
             <span class="material-icons-round">analytics</span>
-            <span class="nav-label">収支シミュレーション</span>
+            <span class="nav-label">今日の収支確認</span>
           </li>
           
           <li class="nav-item" data-page="my-schedule" id="nav-my-schedule" style="display:none">
@@ -117,9 +117,12 @@
             <img id="user-avatar" class="user-avatar" src="" alt="ユーザー" />
             <span id="user-name" class="user-name">ユーザー</span>
           </div>
-          <button id="btn-logout" class="btn-icon" title="ログアウト">
-            <span class="material-icons-round">logout</span>
-          </button>
+          <div style="display:flex;gap:4px">
+            <button id="btn-font-size" class="btn-icon" title="文字を大きくする" style="font-size:0.75rem;font-weight:700;width:36px;height:36px">A+</button>
+            <button id="btn-logout" class="btn-icon" title="ログアウト">
+              <span class="material-icons-round">logout</span>
+            </button>
+          </div>
         </div>
       </nav>
       <div id="sidebar-overlay" class="sidebar-overlay"></div>
