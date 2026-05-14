@@ -80,6 +80,29 @@ export function escapeHtml(str) {
 /**
  * デバウンス
  */
+/**
+ * C-1: グローバルキーボードショートカット
+ * @param {Object} bindings - { 'ArrowLeft': fn, 't': fn, '/': fn, ... }
+ * @returns {Function} unregister - 解除関数
+ */
+export function registerHotkeys(bindings) {
+  const handler = (e) => {
+    // 入力フォームにフォーカスがある時はスキップ
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+    // モーダル表示中もスキップ
+    if (document.getElementById('modal-overlay')?.style.display === 'flex') return;
+
+    const fn = bindings[e.key] || bindings[e.key.toLowerCase()];
+    if (typeof fn === 'function') {
+      e.preventDefault();
+      fn(e);
+    }
+  };
+  document.addEventListener('keydown', handler);
+  return () => document.removeEventListener('keydown', handler);
+}
+
 export function debounce(fn, delay = 300) {
   let timer;
   return (...args) => {
@@ -124,21 +147,80 @@ export function showToast(message, type = 'info', duration = 4000, undoCallback 
 }
 
 /**
- * モーダルを表示
+ * モーダルを表示 (A-3: Esc + Tabトラップ + フォーカス復元)
+ * titleHtml引数は HTML を受け取る (アイコン埋め込み可)
  */
-export function showModal(title, bodyHtml, footerHtml = '') {
+let _modalLastFocus = null;
+let _modalKeyHandler = null;
+export function showModal(titleHtml, bodyHtml, footerHtml = '') {
   const overlay = document.getElementById('modal-overlay');
-  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-title').innerHTML = titleHtml;
   document.getElementById('modal-body').innerHTML = bodyHtml;
   document.getElementById('modal-footer').innerHTML = footerHtml;
   overlay.style.display = 'flex';
+  overlay.setAttribute('aria-hidden', 'false');
+
+  setupModalA11y(overlay);
+}
+
+/**
+ * 外部で modalOverlay.style.display='flex' を直接呼んだ場合のA11y設定
+ * (Esc/Tab/フォーカス復元 を後付けで適用)
+ */
+export function setupModalA11y(overlay) {
+  if (!overlay) overlay = document.getElementById('modal-overlay');
+
+  // 既存ハンドラがあれば一旦解除
+  if (_modalKeyHandler) {
+    document.removeEventListener('keydown', _modalKeyHandler);
+    _modalKeyHandler = null;
+  }
+
+  _modalLastFocus = document.activeElement;
+
+  setTimeout(() => {
+    const focusable = overlay.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+    if (focusable.length > 0) focusable[0].focus();
+  }, 50);
+
+  _modalKeyHandler = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal();
+      return;
+    }
+    if (e.key === 'Tab') {
+      const focusable = Array.from(overlay.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter(el => el.offsetParent !== null);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+  document.addEventListener('keydown', _modalKeyHandler);
 }
 
 /**
  * モーダルを閉じる
  */
 export function closeModal() {
-  document.getElementById('modal-overlay').style.display = 'none';
+  const overlay = document.getElementById('modal-overlay');
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden', 'true');
+  if (_modalKeyHandler) {
+    document.removeEventListener('keydown', _modalKeyHandler);
+    _modalKeyHandler = null;
+  }
+  if (_modalLastFocus && typeof _modalLastFocus.focus === 'function') {
+    try { _modalLastFocus.focus(); } catch {}
+    _modalLastFocus = null;
+  }
 }
 
 /**

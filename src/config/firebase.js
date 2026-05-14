@@ -1,6 +1,6 @@
 // Firebase初期化設定
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 // 環境変数からFirebase設定を読み込む
@@ -29,7 +29,16 @@ let googleProvider = null;
 if (isFirebaseConfigured) {
   try {
     app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    // B-3: オフライン永続化を有効化 (IndexedDB + 複数タブ対応)
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      });
+      console.log('✅ Firestore オフライン永続化を有効化');
+    } catch (persistErr) {
+      console.warn('Firestore永続化スキップ (フォールバック):', persistErr?.code || persistErr);
+      db = getFirestore(app);
+    }
     auth = getAuth(app);
     googleProvider = new GoogleAuthProvider();
     console.log('✅ Firebase初期化成功');

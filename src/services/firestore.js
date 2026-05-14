@@ -144,6 +144,17 @@ export async function addVisit(data) { return addDocument('visits', data); }
 export async function updateVisit(id, data) { return updateDocument('visits', id, data); }
 export async function deleteVisit(id) { return deleteDocument('visits', id); }
 
+// C-2: 未割り当て訪問の件数 (指定日範囲 + scheduled状態)
+export async function countUnassignedVisits(fromDate, toDate) {
+  const all = await getVisitList();
+  return all.filter(v => {
+    if (!v.date) return false;
+    if (v.date < fromDate || v.date > toDate) return false;
+    if (v.status === 'cancelled') return false;
+    return !v.staffId;
+  }).length;
+}
+
 // --- ルート ---
 export async function getRoutesByDate(date) { return queryDocuments('routes', 'date', '==', date); }
 export async function saveRoutes(routesArray) {

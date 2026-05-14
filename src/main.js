@@ -3,13 +3,30 @@ import './styles/index.css';
 import { onAuthChange, logout } from './services/auth.js';
 import { initLogin } from './pages/login.js';
 import { initRouter, navigateTo } from './app.js';
-import { addStaff, addClient, getStaffList, getClientList, addVisit, clearAllData } from './services/firestore.js';
+import { addStaff, addClient, getStaffList, getClientList, addVisit, clearAllData, countUnassignedVisits } from './services/firestore.js';
 import { DEMO_STAFF, DEMO_CLIENTS, DEMO_VISIT_SCHEDULES } from './data/demo-data.js';
 import { showToast, confirmDialog } from './utils/helpers.js';
 
 // アプリ初期化
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🏠 CareRoute 起動中...');
+
+  // B-3: オンライン/オフライン検知
+  const offlineBadge = document.getElementById('offline-badge');
+  const updateOnlineStatus = () => {
+    const online = navigator.onLine;
+    if (offlineBadge) offlineBadge.hidden = online;
+    document.body.classList.toggle('is-offline', !online);
+    if (!online) {
+      showToast('オフライン中: 操作はあとで同期されます', 'warning', 3000);
+    } else if (document.body.classList.contains('was-offline')) {
+      showToast('オンラインに復帰しました', 'success', 2000);
+    }
+    document.body.classList.toggle('was-offline', !online);
+  };
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
 
   // ログイン画面のイベント設定
   initLogin();
@@ -40,14 +57,50 @@ document.addEventListener('DOMContentLoaded', () => {
     showLoginScreen();
   }
 
-  // E-2: 大文字モード切替
+  // A-2: テーマ3循環 (auto → light → dark → auto)
+  const themeBtn = document.getElementById('btn-theme');
+  if (themeBtn) {
+    const THEMES = ['auto', 'light', 'dark'];
+    const ICONS  = { auto: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' };
+    const TITLES = { auto: 'テーマ: 自動 (OS設定)', light: 'テーマ: ライト', dark: 'テーマ: ダーク' };
+    const themeIcon = document.getElementById('theme-icon');
+    const applyTheme = (theme) => {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (themeIcon) themeIcon.textContent = ICONS[theme];
+      themeBtn.title = TITLES[theme];
+      themeBtn.setAttribute('aria-label', TITLES[theme]);
+    };
+    const savedTheme = localStorage.getItem('careroute_theme') || 'auto';
+    applyTheme(THEMES.includes(savedTheme) ? savedTheme : 'auto');
+    themeBtn.addEventListener('click', () => {
+      const current = localStorage.getItem('careroute_theme') || 'auto';
+      const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+      localStorage.setItem('careroute_theme', next);
+      applyTheme(next);
+    });
+  }
+
+  // E-2: 文字サイズ3段階トグル (normal / large / x-large)
   const fontBtn = document.getElementById('btn-font-size');
   if (fontBtn) {
-    const isLarge = localStorage.getItem('careroute_large_text') === '1';
-    if (isLarge) document.body.classList.add('large-text');
+    const SCALES = ['normal', 'large', 'x-large'];
+    const LABELS = { normal: 'A', large: 'A+', 'x-large': 'A++' };
+    const applyScale = (scale) => {
+      if (scale === 'normal') {
+        document.documentElement.removeAttribute('data-font-scale');
+      } else {
+        document.documentElement.setAttribute('data-font-scale', scale);
+      }
+      fontBtn.textContent = LABELS[scale];
+      fontBtn.title = scale === 'normal' ? '文字を大きくする' : scale === 'large' ? 'さらに大きく' : '標準に戻す';
+    };
+    const saved = localStorage.getItem('careroute_font_scale') || 'normal';
+    applyScale(SCALES.includes(saved) ? saved : 'normal');
     fontBtn.addEventListener('click', () => {
-      const nowLarge = document.body.classList.toggle('large-text');
-      localStorage.setItem('careroute_large_text', nowLarge ? '1' : '0');
+      const current = localStorage.getItem('careroute_font_scale') || 'normal';
+      const next = SCALES[(SCALES.indexOf(current) + 1) % SCALES.length];
+      localStorage.setItem('careroute_font_scale', next);
+      applyScale(next);
     });
   }
 
@@ -150,7 +203,37 @@ function showMainApp(user) {
 
   // デモデータ投入ボタン（初回のみ）
   addDemoDataButton();
+
+  // C-2: 未割り当てバッジ更新 (管理者のみ)
+  if (window.isAdmin) refreshUnassignedBadge();
 }
+
+// C-2: 未割り当て件数バッジを更新 (現在月の範囲で集計)
+async function refreshUnassignedBadge() {
+  const badge = document.getElementById('unassigned-count');
+  if (!badge) return;
+  try {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+    const from = `${y}-${m}-01`;
+    const to = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+    const count = await countUnassignedVisits(from, to);
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = false;
+      badge.title = `今月の未割り当て訪問: ${count}件`;
+    } else {
+      badge.hidden = true;
+    }
+  } catch (e) {
+    console.warn('未割り当てバッジ更新エラー:', e);
+  }
+}
+
+// 外部公開 (他ページから訪問変更後に呼べるように)
+window.refreshUnassignedBadge = refreshUnassignedBadge;
 
 /**
  * デモデータ投入ボタンを追加

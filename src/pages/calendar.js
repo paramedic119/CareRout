@@ -1,10 +1,10 @@
 import { getVisitList, deleteVisit, getClientList, getStaffList, updateVisit, saveRoutes, addVisit } from '../services/firestore.js';
-import { navigateTo } from '../app.js';
+import { navigateTo, setPageCleanup } from '../app.js';
 import { autoAssign } from '../services/matching.js';
 import { optimizeRoutes } from '../services/route-optimizer.js';
 import { loadGoogleMapsAPI, getDistanceMatrix } from '../services/google-maps.js';
 import { DEFAULT_OFFICE } from '../utils/constants.js';
-import { today, formatDate, escapeHtml, showModal, closeModal, confirmDialog, showToast, timeToMinutes, calculateVisitIncome } from '../utils/helpers.js';
+import { today, formatDate, escapeHtml, showModal, closeModal, confirmDialog, showToast, timeToMinutes, calculateVisitIncome, registerHotkeys } from '../utils/helpers.js';
 
 let currentDate = new Date();
 
@@ -147,7 +147,7 @@ export async function renderCalendar() {
     currentDate.setMonth(currentDate.getMonth() - 1);
     renderCalendar();
   });
-  
+
   document.getElementById('cal-next-month').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
     renderCalendar();
@@ -155,6 +155,14 @@ export async function renderCalendar() {
 
   document.getElementById('cal-generate-month').addEventListener('click', generateMonthSchedule);
   document.getElementById('cal-weekly-opt').addEventListener('click', runWeeklyOptimization);
+
+  // C-1: キーボードショートカット (←/→で月切替、Tで今月)
+  const unregisterHotkeys = registerHotkeys({
+    ArrowLeft: () => document.getElementById('cal-prev-month')?.click(),
+    ArrowRight: () => document.getElementById('cal-next-month')?.click(),
+    t: () => { currentDate = new Date(); renderCalendar(); },
+  });
+  setPageCleanup(unregisterHotkeys);
 
   // 日付クリックで詳細モーダルを開く
   document.querySelectorAll('.calendar-day').forEach(el => {

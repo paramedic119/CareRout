@@ -1,8 +1,28 @@
 import { getVisitsByDate, getStaffList, getClientList, updateVisit, addVisit } from '../services/firestore.js';
-import { today, formatDateJP, escapeHtml, showToast, confirmDialog } from '../utils/helpers.js';
+import { today, formatDateJP, escapeHtml, showToast, confirmDialog, closeModal, setupModalA11y, registerHotkeys } from '../utils/helpers.js';
+import { setPageCleanup } from '../app.js';
 import { CANCEL_REASONS, SALES_TARGETS, TIME_SLOTS } from '../utils/constants.js';
 
 let mySelectedDate = today();
+let bannerCountdownTimer = null;
+
+function stopBannerTimer() {
+  if (bannerCountdownTimer) {
+    clearInterval(bannerCountdownTimer);
+    bannerCountdownTimer = null;
+  }
+}
+
+function formatCountdown(visitTime) {
+  const [vh, vm] = (visitTime || '00:00').split(':').map(Number);
+  const now = new Date();
+  const remaining = (vh * 60 + vm) - (now.getHours() * 60 + now.getMinutes());
+  if (remaining > 60) return `あと約${Math.round(remaining / 60)}時間${remaining % 60 > 0 ? remaining % 60 + '分' : ''}`;
+  if (remaining > 0) return `あと約${remaining}分`;
+  if (remaining === 0) return '今すぐ';
+  if (remaining > -60) return `${-remaining}分超過`;
+  return '時間を過ぎています';
+}
 
 export async function renderMySchedule() {
   const container = document.getElementById('page-container');
@@ -92,6 +112,19 @@ export async function renderMySchedule() {
 
   document.getElementById('btn-add-sales').addEventListener('click', openAddSalesModal);
 
+  // C-1: キーボードショートカット (←/→/t)
+  const unregisterHotkeys = registerHotkeys({
+    ArrowLeft: () => document.getElementById('my-prev-day')?.click(),
+    ArrowRight: () => document.getElementById('my-next-day')?.click(),
+    t: () => document.getElementById('my-today-btn')?.click(),
+  });
+  setPageCleanup(() => {
+    unregisterHotkeys();
+    stopBannerTimer();
+    document.getElementById('next-visit-banner')?.remove();
+    document.body.classList.remove('has-next-visit-banner');
+  });
+
   await loadAndRenderData(mySelectedDate);
 }
 
@@ -151,7 +184,11 @@ async function loadAndRenderData(selectedDate) {
       return;
     }
 
-    // 次の訪問バナー（B-1）
+    // B-1: 次の訪問スティッキーバナー (画面下部固定)
+    stopBannerTimer();
+    document.getElementById('next-visit-banner')?.remove();
+    document.body.classList.remove('has-next-visit-banner');
+
     const nextVisit = myVisits.find(v => v.status === 'scheduled' || !v.status);
     if (nextVisit) {
       const nextClient = clientList.find(c => c.id === nextVisit.clientId);
@@ -161,34 +198,54 @@ async function loadAndRenderData(selectedDate) {
           ? `${nextClient.lat},${nextClient.lng}`
           : encodeURIComponent(nextVisit.clientName || ''));
 
-      const now     = new Date();
-      const [vh, vm] = (nextVisit.scheduledTime || nextVisit.startTime || '00:00').split(':').map(Number);
-      const visitMin = vh * 60 + vm;
-      const nowMin   = now.getHours() * 60 + now.getMinutes();
-      const remaining = visitMin - nowMin;
-      const countdownText = remaining > 0
-        ? `あと約${remaining}分`
-        : remaining === 0 ? '今すぐ' : '時間を過ぎています';
-
-      document.getElementById('my-schedule-list').insertAdjacentHTML('beforebegin', `
-        <div class="next-visit-banner" id="next-visit-banner">
+      const visitTime = nextVisit.scheduledTime || nextVisit.startTime || '';
+      const bannerHtml = `
+        <div class="next-visit-banner" id="next-visit-banner" role="region" aria-label="次の訪問">
           <div class="next-visit-info">
-            <span class="material-icons-round" style="color:var(--primary);font-size:28px">directions_walk</span>
-            <div>
+            <span class="material-icons-round" style="color:var(--primary);font-size:28px" aria-hidden="true">directions_walk</span>
+            <div style="min-width:0">
               <div class="next-visit-label">次の訪問</div>
               <div class="next-visit-name">${escapeHtml(nextVisit.clientName)}${nextVisit.type !== 'sales' ? ' 様' : ''}</div>
-              <div class="next-visit-time">${nextVisit.scheduledTime || nextVisit.startTime || ''} <span class="next-visit-countdown">${countdownText}</span></div>
+              <div class="next-visit-time">${escapeHtml(visitTime)} <span class="next-visit-countdown" id="next-visit-countdown">${escapeHtml(formatCountdown(visitTime))}</span></div>
             </div>
           </div>
-          ${navTarget ? `
-            <a href="https://maps.google.com/?daddr=${navTarget}" target="_blank" rel="noopener noreferrer"
-               class="btn btn-primary btn-sm" style="flex-shrink:0;white-space:nowrap">
-              <span class="material-icons-round">navigation</span>
-              ナビ開始
-            </a>
-          ` : ''}
+          <div class="next-visit-actions">
+            ${navTarget ? `
+              <a href="https://maps.google.com/?daddr=${navTarget}" target="_blank" rel="noopener noreferrer"
+                 class="btn btn-secondary btn-sm" aria-label="Googleマップでナビ開始">
+                <span class="material-icons-round" aria-hidden="true">navigation</span>
+              </a>
+            ` : ''}
+            <button class="btn btn-primary btn-sm" id="banner-complete-btn" aria-label="この訪問を完了" data-id="${nextVisit.id}">
+              <span class="material-icons-round" aria-hidden="true">check_circle</span>
+              完了
+            </button>
+          </div>
         </div>
-      `);
+      `;
+      document.body.insertAdjacentHTML('beforeend', bannerHtml);
+      document.body.classList.add('has-next-visit-banner');
+
+      // カウントダウンを30秒ごとに更新
+      bannerCountdownTimer = setInterval(() => {
+        const cd = document.getElementById('next-visit-countdown');
+        if (cd) cd.textContent = formatCountdown(visitTime);
+      }, 30000);
+
+      // 完了ボタン
+      document.getElementById('banner-complete-btn')?.addEventListener('click', async () => {
+        try {
+          await updateVisit(nextVisit.id, { status: 'completed' });
+          showToast('訪問を完了しました', 'success', 5000, async () => {
+            await updateVisit(nextVisit.id, { status: 'scheduled' });
+            showToast('取り消しました', 'info');
+            loadAndRenderData(selectedDate);
+          });
+          loadAndRenderData(selectedDate);
+        } catch {
+          showToast('あとで同期します', 'warning');
+        }
+      });
     }
 
     // 予定リストの描画
@@ -323,7 +380,7 @@ async function loadAndRenderData(selectedDate) {
           });
           loadAndRenderData(selectedDate);
         } catch (error) {
-          showToast('更新に失敗しました', 'error');
+          showToast('あとで同期します', 'warning');
         }
       });
     });
@@ -346,7 +403,7 @@ async function loadAndRenderData(selectedDate) {
             await updateVisit(id, { status: 'scheduled' });
             showToast('完了を取り消しました', 'info');
             loadAndRenderData(selectedDate);
-          } catch { showToast('更新に失敗しました', 'error'); }
+          } catch { showToast('あとで同期します', 'warning'); }
         }
       });
     });
@@ -441,53 +498,64 @@ function openCancelModal(visitId, selectedDate) {
   const modalBody = document.getElementById('modal-body');
   const modalFooter = document.getElementById('modal-footer');
 
-  modalTitle.textContent = 'キャンセルの登録';
-  modalTitle.innerHTML = '<span class="material-icons-round" style="color:var(--danger)">cancel</span> キャンセルの登録';
+  modalTitle.innerHTML = '<span class="material-icons-round" style="color:var(--danger)" aria-hidden="true">cancel</span> キャンセル理由を選択';
 
+  // B-2: チップ式ワンタップキャンセル登録
   modalBody.innerHTML = `
-    <div class="form-group">
-      <label class="form-label">キャンセル理由 <span style="color:var(--danger)">*必須</span></label>
-      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">
-        ※経営データとして蓄積されるため、正確な理由を選択してください。
-      </p>
-      <select id="cancel-reason-select" class="form-input">
-        <option value="">選択してください...</option>
-        ${CANCEL_REASONS.map(r => `<option value="${r}">${r}</option>`).join('')}
-      </select>
+    <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:12px;">
+      タップで即登録されます。間違えた場合はトースト通知から「元に戻す」を押してください。
+    </p>
+    <div class="cancel-chip-group" role="group" aria-label="キャンセル理由">
+      ${CANCEL_REASONS.map((r, i) => `
+        <button type="button" class="cancel-chip" data-reason="${escapeHtml(r)}" autofocus="${i === 0 ? 'true' : 'false'}">
+          <span class="material-icons-round" aria-hidden="true">close</span>
+          <span>${escapeHtml(r)}</span>
+        </button>
+      `).join('')}
     </div>
-    <div class="form-group" style="margin-top: 16px;">
-      <label class="form-label">備考 (任意)</label>
-      <textarea id="cancel-notes" class="form-input" rows="3" placeholder="詳細な状況があれば記入"></textarea>
-    </div>
+    <details class="cancel-notes-details" style="margin-top:12px">
+      <summary style="cursor:pointer; color:var(--text-secondary); font-size:0.85rem; padding:6px 0;">
+        備考を追加する (任意)
+      </summary>
+      <textarea id="cancel-notes" class="form-input" rows="3" placeholder="詳細な状況があれば記入" style="margin-top:6px;"></textarea>
+    </details>
   `;
 
   modalFooter.innerHTML = `
-    <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').style.display='none'">閉じる</button>
-    <button class="btn btn-primary" id="btn-submit-cancel" style="background:var(--danger); border-color:var(--danger);">キャンセル確定</button>
+    <button class="btn btn-secondary" id="btn-cancel-close">閉じる</button>
   `;
 
   modalOverlay.style.display = 'flex';
+  modalOverlay.setAttribute('aria-hidden', 'false');
+  setupModalA11y(modalOverlay);
+  document.getElementById('btn-cancel-close')?.addEventListener('click', closeModal);
 
-  document.getElementById('btn-submit-cancel').addEventListener('click', async () => {
-    const reason = document.getElementById('cancel-reason-select').value;
-    if (!reason) {
-      showToast('キャンセル理由を選択してください', 'warning');
-      return;
-    }
-    const notes = document.getElementById('cancel-notes').value;
-
-    try {
-      await updateVisit(visitId, {
-        status: 'cancelled',
-        cancelReason: reason,
-        cancelNotes: notes
-      });
-      showToast('キャンセルを登録しました', 'success');
-      modalOverlay.style.display = 'none';
-      loadAndRenderData(selectedDate);
-    } catch (error) {
-      showToast('更新に失敗しました', 'error');
-    }
+  // チップタップ即登録 + Undo付き
+  modalBody.querySelectorAll('.cancel-chip').forEach(chip => {
+    chip.addEventListener('click', async () => {
+      const reason = chip.dataset.reason;
+      const notes = document.getElementById('cancel-notes')?.value || '';
+      closeModal();
+      try {
+        await updateVisit(visitId, {
+          status: 'cancelled',
+          cancelReason: reason,
+          cancelNotes: notes
+        });
+        showToast(`キャンセル登録: ${reason}`, 'success', 5000, async () => {
+          await updateVisit(visitId, {
+            status: 'scheduled',
+            cancelReason: null,
+            cancelNotes: null
+          });
+          showToast('取り消しました', 'info');
+          loadAndRenderData(selectedDate);
+        });
+        loadAndRenderData(selectedDate);
+      } catch (error) {
+        showToast('あとで同期します', 'warning');
+      }
+    });
   });
 }
 
@@ -533,11 +601,14 @@ function openAddSalesModal() {
   `;
 
   modalFooter.innerHTML = `
-    <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').style.display='none'">キャンセル</button>
+    <button class="btn btn-secondary" id="btn-sales-close">キャンセル</button>
     <button class="btn btn-primary" id="btn-submit-sales">予定を追加</button>
   `;
 
   modalOverlay.style.display = 'flex';
+  modalOverlay.setAttribute('aria-hidden', 'false');
+  setupModalA11y(modalOverlay);
+  document.getElementById('btn-sales-close')?.addEventListener('click', closeModal);
 
   document.getElementById('btn-submit-sales').addEventListener('click', async () => {
     const name = document.getElementById('sales-client-name').value.trim();
@@ -565,7 +636,7 @@ function openAddSalesModal() {
         status: 'scheduled'
       });
       showToast('営業予定を追加しました', 'success');
-      modalOverlay.style.display = 'none';
+      closeModal();
       loadAndRenderData(selectedDate);
     } catch (error) {
       console.error(error);

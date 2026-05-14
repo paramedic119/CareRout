@@ -1,7 +1,7 @@
 // 利用者管理画面
 import { getClientList, addClient, updateClient, deleteClient, getVisitList } from '../services/firestore.js';
 import { CARE_LEVELS, SERVICE_TYPES, GENDER_PREFERENCES, SKILL_CATEGORIES, DEFAULT_OFFICE } from '../utils/constants.js';
-import { showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
+import { showToast, showModal, closeModal, confirmDialog, escapeHtml, debounce } from '../utils/helpers.js';
 import { loadGoogleMapsAPI, geocodeAddress } from '../services/google-maps.js';
 
 let currentClientList = [];
@@ -24,13 +24,16 @@ export async function renderClientManage() {
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">
-        <span class="material-icons-round">elderly</span>
+        <span class="material-icons-round" aria-hidden="true">elderly</span>
         利用者管理
       </h1>
-      <button class="btn btn-primary" id="btn-add-client">
-        <span class="material-icons-round">group_add</span>
-        新規登録
-      </button>
+      <div class="btn-group">
+        <input type="search" id="client-search" class="form-input" placeholder="名前・住所で検索..." style="width:220px" aria-label="利用者を検索">
+        <button class="btn btn-primary" id="btn-add-client">
+          <span class="material-icons-round" aria-hidden="true">group_add</span>
+          新規登録
+        </button>
+      </div>
     </div>
     <div id="client-list-container">
       ${renderClientList(currentClientList, allVisits)}
@@ -38,14 +41,34 @@ export async function renderClientManage() {
   `;
 
   document.getElementById('btn-add-client').addEventListener('click', () => openClientForm());
+
+  // C-4: 検索
+  const applyFilter = debounce(() => {
+    const q = (document.getElementById('client-search')?.value || '').trim().toLowerCase();
+    const filtered = q
+      ? currentClientList.filter(c => (c.name || '').toLowerCase().includes(q) || (c.address || '').toLowerCase().includes(q))
+      : currentClientList;
+    document.getElementById('client-list-container').innerHTML = renderClientList(filtered, allVisits);
+  }, 200);
+  document.getElementById('client-search')?.addEventListener('input', applyFilter);
 }
 
 function renderClientList(list, visits) {
   if (list.length === 0) {
     return `<div class="empty-state">
-      <span class="material-icons-round">person_off</span>
+      <span class="material-icons-round" aria-hidden="true">person_off</span>
       <h3>利用者が登録されていません</h3>
-      <p>「新規登録」ボタンから利用者を追加してください</p>
+      <p>新規登録するか、デモデータを投入してアプリを試せます</p>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:16px;">
+        <button class="btn btn-primary" onclick="document.getElementById('btn-add-client')?.click()">
+          <span class="material-icons-round" aria-hidden="true">person_add</span>
+          利用者を新規登録
+        </button>
+        <button class="btn btn-secondary" onclick="document.getElementById('btn-load-demo')?.click()">
+          <span class="material-icons-round" aria-hidden="true">science</span>
+          デモデータを投入
+        </button>
+      </div>
     </div>`;
   }
 

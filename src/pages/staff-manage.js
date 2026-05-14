@@ -1,7 +1,7 @@
 // 職員管理画面
 import { getStaffList, addStaff, updateStaff, deleteStaff } from '../services/firestore.js';
 import { SKILL_CATEGORIES, GENDERS, STAFF_COLORS, DEFAULT_OFFICE } from '../utils/constants.js';
-import { showToast, showModal, closeModal, confirmDialog, escapeHtml } from '../utils/helpers.js';
+import { showToast, showModal, closeModal, confirmDialog, escapeHtml, debounce } from '../utils/helpers.js';
 import { loadGoogleMapsAPI, geocodeAddress } from '../services/google-maps.js';
 
 let currentStaffList = [];
@@ -13,13 +13,16 @@ export async function renderStaffManage() {
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">
-        <span class="material-icons-round">badge</span>
+        <span class="material-icons-round" aria-hidden="true">badge</span>
         職員管理
       </h1>
-      <button class="btn btn-primary" id="btn-add-staff">
-        <span class="material-icons-round">person_add</span>
-        新規登録
-      </button>
+      <div class="btn-group">
+        <input type="search" id="staff-search" class="form-input" placeholder="名前で検索..." style="width:200px" aria-label="職員を検索">
+        <button class="btn btn-primary" id="btn-add-staff">
+          <span class="material-icons-round" aria-hidden="true">person_add</span>
+          新規登録
+        </button>
+      </div>
     </div>
     <div id="staff-list-container">
       ${renderStaffList(currentStaffList)}
@@ -27,15 +30,35 @@ export async function renderStaffManage() {
   `;
 
   document.getElementById('btn-add-staff').addEventListener('click', () => openStaffForm());
+
+  // C-4: 検索
+  const applyFilter = debounce(() => {
+    const q = (document.getElementById('staff-search')?.value || '').trim().toLowerCase();
+    const filtered = q
+      ? currentStaffList.filter(s => (s.name || '').toLowerCase().includes(q) || (s.address || '').toLowerCase().includes(q))
+      : currentStaffList;
+    document.getElementById('staff-list-container').innerHTML = renderStaffList(filtered);
+  }, 200);
+  document.getElementById('staff-search')?.addEventListener('input', applyFilter);
 }
 
 function renderStaffList(list) {
   if (list.length === 0) {
     return `
       <div class="empty-state">
-        <span class="material-icons-round">person_off</span>
+        <span class="material-icons-round" aria-hidden="true">person_off</span>
         <h3>職員が登録されていません</h3>
-        <p>「新規登録」ボタンから職員を追加してください</p>
+        <p>新規登録するか、デモデータを投入してアプリを試せます</p>
+        <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:16px;">
+          <button class="btn btn-primary" onclick="document.getElementById('btn-add-staff')?.click()">
+            <span class="material-icons-round" aria-hidden="true">person_add</span>
+            職員を新規登録
+          </button>
+          <button class="btn btn-secondary" onclick="document.getElementById('btn-load-demo')?.click()">
+            <span class="material-icons-round" aria-hidden="true">science</span>
+            デモデータを投入
+          </button>
+        </div>
       </div>
     `;
   }

@@ -1,7 +1,8 @@
 // スケジュール管理画面
 import { getStaffList, getClientList, getVisitsByDate, getVisitList, addVisit, deleteVisit, getRoutesByDate } from '../services/firestore.js';
 import { SERVICE_TYPES, COST_PER_KM, DEFAULT_VISIT_INCOME } from '../utils/constants.js';
-import { today, formatDate, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml, timeToMinutes, calculateVisitIncome, calculateCustomRevenue } from '../utils/helpers.js';
+import { today, formatDate, formatDateJP, showToast, showModal, closeModal, confirmDialog, escapeHtml, timeToMinutes, calculateVisitIncome, calculateCustomRevenue, registerHotkeys } from '../utils/helpers.js';
+import { setPageCleanup, navigateTo } from '../app.js';
 
 let selectedDate = today();
 const savedDate = localStorage.getItem('navDate');
@@ -20,9 +21,16 @@ export async function renderSchedule() {
         日別スケジュール確認
       </h1>
       <div class="btn-group">
+        <button class="btn btn-secondary btn-sm" id="sched-prev-day" title="前の日 (←)" aria-label="前の日">
+          <span class="material-icons-round" aria-hidden="true">chevron_left</span>
+        </button>
         <input type="date" id="schedule-date" class="form-input" value="${selectedDate}" style="width:180px" />
+        <button class="btn btn-secondary btn-sm" id="sched-next-day" title="次の日 (→)" aria-label="次の日">
+          <span class="material-icons-round" aria-hidden="true">chevron_right</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" id="sched-today-btn" title="今日 (T)">今日</button>
         <button class="btn btn-primary" id="btn-add-visit">
-          <span class="material-icons-round">add</span>
+          <span class="material-icons-round" aria-hidden="true">add</span>
           訪問追加
         </button>
       </div>
@@ -37,7 +45,30 @@ export async function renderSchedule() {
     loadSchedule();
   });
 
+  const shiftDate = (delta) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + delta);
+    selectedDate = d.toISOString().slice(0, 10);
+    document.getElementById('schedule-date').value = selectedDate;
+    loadSchedule();
+  };
+  document.getElementById('sched-prev-day')?.addEventListener('click', () => shiftDate(-1));
+  document.getElementById('sched-next-day')?.addEventListener('click', () => shiftDate(1));
+  document.getElementById('sched-today-btn')?.addEventListener('click', () => {
+    selectedDate = today();
+    document.getElementById('schedule-date').value = selectedDate;
+    loadSchedule();
+  });
+
   document.getElementById('btn-add-visit').addEventListener('click', openVisitForm);
+
+  // C-1: キーボードショートカット
+  const unregisterHotkeys = registerHotkeys({
+    ArrowLeft: () => shiftDate(-1),
+    ArrowRight: () => shiftDate(1),
+    t: () => document.getElementById('sched-today-btn')?.click(),
+  });
+  setPageCleanup(unregisterHotkeys);
 
   await loadSchedule();
 }
@@ -54,11 +85,23 @@ async function loadSchedule() {
   if (visits.length === 0) {
     contentDiv.innerHTML = `
       <div class="empty-state">
-        <span class="material-icons-round">event_busy</span>
+        <span class="material-icons-round" aria-hidden="true">event_busy</span>
         <h3>${formatDateJP(selectedDate)} の訪問予定はありません</h3>
-        <p>「訪問追加」ボタンから予定を登録するか、マッチング＆最適化を実行してください</p>
+        <p>予定を登録する方法を選んでください</p>
+        <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:16px;">
+          <button class="btn btn-primary" id="empty-add-visit">
+            <span class="material-icons-round" aria-hidden="true">add</span>
+            訪問を追加
+          </button>
+          <button class="btn btn-secondary" id="empty-goto-matching">
+            <span class="material-icons-round" aria-hidden="true">auto_fix_high</span>
+            マッチング最適化を実行
+          </button>
+        </div>
       </div>
     `;
+    document.getElementById('empty-add-visit')?.addEventListener('click', openVisitForm);
+    document.getElementById('empty-goto-matching')?.addEventListener('click', () => navigateTo('matching'));
     return;
   }
 

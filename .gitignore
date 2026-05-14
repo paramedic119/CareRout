@@ -10,6 +10,7 @@ dist/
 # エディタ
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 

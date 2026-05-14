@@ -8,6 +8,7 @@ import { renderCalendar } from './pages/calendar.js';
 import { renderMatching } from './pages/matching.js';
 import { renderRevenue } from './pages/revenue.js';
 import { renderMySchedule } from './pages/my-schedule.js';
+import { closeModal } from './utils/helpers.js';
 
 // ページ定義
 const pages = {
@@ -23,6 +24,12 @@ const pages = {
 };
 
 let currentPage = 'calendar';
+let currentPageCleanup = null;
+
+// C-1: 各ページから呼んでクリーンアップ関数を登録 (hotkey解除など)
+export function setPageCleanup(fn) {
+  currentPageCleanup = fn;
+}
 
 /**
  * ナビゲーションを初期化
@@ -47,23 +54,20 @@ export function initRouter() {
   const overlay = document.getElementById('sidebar-overlay');
   
   const toggleMobileMenu = () => {
-    sidebar.classList.toggle('open');
+    const isOpen = sidebar.classList.toggle('open');
     overlay.classList.toggle('open');
+    document.getElementById('btn-mobile-menu')?.setAttribute('aria-expanded', String(isOpen));
   };
 
   document.getElementById('btn-mobile-menu')?.addEventListener('click', toggleMobileMenu);
   overlay?.addEventListener('click', toggleMobileMenu);
 
-  // モーダル閉じる
-  document.getElementById('btn-modal-close')?.addEventListener('click', () => {
-    document.getElementById('modal-overlay').style.display = 'none';
-  });
+  // モーダル閉じる (A-3: helpers.closeModalに統一)
+  document.getElementById('btn-modal-close')?.addEventListener('click', closeModal);
 
   // モーダルオーバーレイクリックで閉じる
   document.getElementById('modal-overlay')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) {
-      e.currentTarget.style.display = 'none';
-    }
+    if (e.target === e.currentTarget) closeModal();
   });
 }
 
@@ -73,6 +77,12 @@ export function initRouter() {
 export async function navigateTo(pageName) {
   const page = pages[pageName];
   if (!page) return;
+
+  // C-1: 前ページのクリーンアップ
+  if (currentPageCleanup) {
+    try { currentPageCleanup(); } catch (e) { console.warn('page cleanup error', e); }
+    currentPageCleanup = null;
+  }
 
   currentPage = pageName;
 
@@ -90,6 +100,12 @@ export async function navigateTo(pageName) {
   // モバイルメニューを閉じる
   document.getElementById('sidebar')?.classList.remove('open');
   document.getElementById('sidebar-overlay')?.classList.remove('open');
+
+  // B-1: 別ページ遷移時に次の訪問バナーをクリーンアップ
+  if (pageName !== 'my-schedule') {
+    document.getElementById('next-visit-banner')?.remove();
+    document.body.classList.remove('has-next-visit-banner');
+  }
 
   // ページタイトルを更新
   document.title = `${page.title} - CareRoute`;
